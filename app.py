@@ -1,62 +1,76 @@
 import requests
 import os
+import datetime
 
-# Your Google Maps Places API key
 API_KEY = os.environ.get("GOOGLE_API_KEY")
 
-# Поточне місцезнаходження користувача (вам потрібно буде реалізувати його отримання)
-user_latitude = 50.4050316  # Приклад широти (Київ)
-user_longitude = 30.6666277  # Приклад довготи
+user_latitude = 50.4050316 
+user_longitude = 30.6666277 
 
-# Радіус пошуку в метрах
-search_radius = 250  # 5 кілометрів
+search_radius = 250 
 
-# Ключові слова пошуку
 keywords = "кафе ресторан"
 
-# Базова URL-адреса API для пошуку поблизу
-base_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
+base_details_url = "https://maps.googleapis.com/maps/api/place/details/json"
 place_types = ["cafe", "restaurant"]
-# Створення URL-адреси запиту API
-params = {
+
+nearby_params = {
     "location": f"{user_latitude},{user_longitude}",
     "radius": search_radius,
     "keywords": keywords,
     "type": "|".join(place_types),
     "key": API_KEY,
-    "fields": "opening_hours"
 }
 
-# Здійснення запиту API
-response = requests.get(base_url, params=params)
+nearby_response = requests.get(base_nearby_url, params=nearby_params)
 
-# Обробка помилок, якщо запит не вдасться
-if response.status_code != 200:
-    print("Виникла помилка. Код відповіді:", response.status_code)
-    # Додайте більш детальну обробку помилок, якщо це необхідно
-else: 
-    data = response.json()
-    print(data)
-    if data['status'] == 'OK':
-        # Обробка списку місць поблизу
-        for place in data['results']:
+if nearby_response.status_code != 200:
+    print("Помилка запиту пошуку поблизу. Код відповіді:", nearby_response.status_code)
+
+else:
+    nearby_data = nearby_response.json()
+
+    if nearby_data['status'] == 'OK':
+        for place in nearby_data['results']:
             name = place['name']
             address = place['vicinity']
+            place_id = place['place_id']
 
-            # Перевірка доступності годин роботи
-            if 'opening_hours' in place:
-                opening_hours = place['opening_hours']
+            details_url = f"{base_details_url}?place_id={place_id}&fields=opening_hours,formatted_address&key={API_KEY}"
 
-                open_now = opening_hours.get('open_now', False)
-                status = "Відкрито зараз" if open_now else "Закрито"
+            details_response = requests.get(details_url)
+
+            if details_response.status_code != 200:
+                print(f"Помилка отримання деталей для {name}: Код відповіді:", details_response.status_code)
 
             else:
-                status = "Статус роботи недоступний"
+                details_data = details_response.json()
 
-            print(f"Назва: {name}")
-            print(f"Адреса: {address}")
-            print(f"Статус: {status}")
-            print("------")
+                if details_data['status'] == 'OK':
+                    result = details_data['result']
+
+                    if 'opening_hours' in result:
+                        opening_hours = result['opening_hours']
+                        open_now = opening_hours.get('open_now', False)
+                        weekday_text = opening_hours.get('weekday_text', [])
+
+                        print(f"Назва: {name}")
+                        print(f"Адреса: {result.get('formatted_address')}") 
+                        print(f"Статус роботи: {'Відкрито' if open_now else 'Закрито'}")
+
+                        for day_text in weekday_text:
+                            print(day_text)
+
+                    else:
+                        print(f"Назва: {name}")
+                        print(f"Адреса: {result.get('formatted_address')}")
+                        print(f"Інформація про години роботи недоступна")
+
+                    print("--------") 
+
+                else:
+                    print(f"Помилка отримання деталей для {name}")
 
     else:
-        print("Результатів не знайдено.")
+        print("Результатів пошуку поблизу не знайдено.")

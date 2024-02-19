@@ -1,26 +1,10 @@
 import requests
 import os
 import datetime
-
+from telebot import TeleBot
 
 def get_places(latitude, longitude, search_radius, keywords):
-
-    """
-    Ця функція шукає заклади поблизу за заданими параметрами
-    і повертає список словників з даними про них.
-
-    Args:
-        latitude: Широта.
-        longitude: Довгота.
-        search_radius: Радіус пошуку в метрах.
-        keywords: Ключові слова пошуку.
-
-    Returns:
-        Список словників з даними про заклади.
-    """
-
     API_KEY = os.environ.get("GOOGLE_API_KEY")
-
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     place_types = ["cafe", "restaurant"]
 
@@ -91,22 +75,42 @@ def get_places(latitude, longitude, search_radius, keywords):
             print("Результатів пошуку поблизу не знайдено.")
             return []
 
-latitude = 50.4050316
-longitude = 30.6666277
-search_radius = 250
-keywords = "кафе ресторан"
+BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
-places = get_places(latitude, longitude, search_radius, keywords)
+bot = TeleBot(BOT_TOKEN)
 
-for place in places:
-    print(f"Назва: {place['name']}")
-    print(f"Адреса: {place['address']}")
-    print(f"Статус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}")
+@bot.message_handler(commands=['start'])
+def start(message):
+    bot.send_message(message.chat.id, """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
+                     \n Для пошуку введіть команду /search та через пробіл keywords.""")
 
-    if place['weekday_text']: 
-        for day_text in place['weekday_text']:
-            print(day_text)
-    else: 
-        print("Інформація про повсякденний графік роботи недоступна") 
+@bot.message_handler(commands=['search'])
+def search(message):
+    args = message.text.split(' ')
+    if len(args) < 2:
+        bot.send_message(message.chat.id, "Введіть команду /search та через пробіл keywords.")
+        return
 
-    print("--------")
+    keywords = ' '.join(args[1:])
+    latitude = 50.4050316 
+    longitude = 30.6666277
+    search_radius = 250
+
+    places = get_places(latitude, longitude, search_radius, keywords)
+
+    if not places:
+        bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
+        return
+
+    for place in places:
+        response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}"
+
+        if place['weekday_text']:
+            response += "\n\nГрафік роботи:"
+            for day_text in place['weekday_text']:
+                response += f"\n- {day_text}"
+
+        bot.send_message(message.chat.id, response)
+        
+if __name__ == '__main__':
+    bot.polling()

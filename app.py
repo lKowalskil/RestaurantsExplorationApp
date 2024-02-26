@@ -2,9 +2,16 @@ import requests
 import os
 import datetime
 from telebot import TeleBot
+import redis
+import logging
+
+logger = logging.getLogger(__name__)
+redis_client = redis.Redis()
+logger.setLevel(logging.DEBUG)
+
+API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 def get_places(latitude, longitude, search_radius, keywords):
-    API_KEY = os.environ.get("GOOGLE_API_KEY")
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     place_types = ["cafe", "restaurant"]
 
@@ -81,36 +88,48 @@ bot = TeleBot(BOT_TOKEN)
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    bot.send_message(message.chat.id, """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
-                     \n Для пошуку введіть команду /search та через пробіл keywords.""")
+    bot.send_message(message.chat.id, 
+                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
+                     \nДля пошуку введіть команду /search та через пробіл keywords.
+                     \nНадішліть мені своє місцеположення, щоб я знав де шукати""")
+
+@bot.message_handler(content_types=['location'])
+def save_location(message):
+    location_string = f"{message.location.latitude},{message.location.longitude}"
+    redis_client.set(message.chat.id, location_string)
+    bot.send_message(message.chat.id, "Запам'ятав")
 
 @bot.message_handler(commands=['search'])
 def search(message):
-    args = message.text.split(' ')
-    if len(args) < 2:
-        bot.send_message(message.chat.id, "Введіть команду /search та через пробіл keywords.")
-        return
+    location_string = redis_client.get(message.chat.id)
+    
+    if location_string:
+        args = message.text.split(' ')
+        if len(args) < 2:
+            bot.send_message(message.chat.id, "Введіть команду /search та через пробіл keywords.")
+            return
 
-    keywords = ' '.join(args[1:])
-    latitude = 50.4050316 
-    longitude = 30.6666277
-    search_radius = 250
+        keywords = ' '.join(args[1:])
+        latitude, longitude = location_string.decode().split(',') 
+        search_radius = 250
 
-    places = get_places(latitude, longitude, search_radius, keywords)
+        places = get_places(latitude, longitude, search_radius, keywords)
 
-    if not places:
-        bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
-        return
+        if not places:
+            bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
+            return
 
-    for place in places:
-        response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}"
+        for place in places:
+            response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}"
 
-        if place['weekday_text']:
-            response += "\n\nГрафік роботи:"
-            for day_text in place['weekday_text']:
-                response += f"\n- {day_text}"
+            if place['weekday_text']:
+                response += "\n\nГрафік роботи:"
+                for day_text in place['weekday_text']:
+                    response += f"\n- {day_text}"
 
-        bot.send_message(message.chat.id, response)
+            bot.send_message(message.chat.id, response)
+    else:
+        bot.send_message(message.chat.id, "Я не знаю де ви знаходитесь, надішліть вашу геолокацію")
         
 if __name__ == '__main__':
     bot.polling()

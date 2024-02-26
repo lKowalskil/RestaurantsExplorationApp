@@ -1,15 +1,23 @@
 import requests
 import os
 import datetime
-from telebot import TeleBot
+from telebot import TeleBot, types
 import redis
 import logging
+from geopy.distance import geodesic
+import urllib
 
 logger = logging.getLogger(__name__)
 redis_client = redis.Redis()
 logger.setLevel(logging.DEBUG)
 
 API_KEY = os.environ.get("GOOGLE_API_KEY")
+
+def generate_map_link(place):
+    place_name = urllib.parse.quote_plus(place['name'])
+    place_address = urllib.parse.quote_plus(place['address'])
+    map_url = f"https://www.google.com/maps/search/?api=1&query={place_name},{place_address}"
+    return map_url
 
 def get_places(latitude, longitude, search_radius, keywords):
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
@@ -42,6 +50,11 @@ def get_places(latitude, longitude, search_radius, keywords):
 
                 details_response = requests.get(details_url)
 
+                user_location = (latitude, longitude)
+                place_location = (place['geometry']['location']['lat'], place['geometry']['location']['lng'])
+                distance = geodesic(user_location, place_location).meters 
+
+                
                 if details_response.status_code != 200:
                     print(f"Помилка отримання деталей для {place['name']}: Код відповіді:", details_response.status_code)
                     continue
@@ -62,6 +75,7 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "address": result.get('formatted_address'),
                                 "open_now": open_now,
                                 "weekday_text": weekday_text,
+                                "distance": distance 
                             }
 
                             places.append(place_data)
@@ -72,6 +86,7 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "address": result.get('formatted_address'),
                                 "open_now": None,
                                 "weekday_text": None,
+                                "distance": distance 
                             }
 
                             places.append(place_data)
@@ -120,14 +135,17 @@ def search(message):
             return
 
         for place in places:
-            response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}"
+            response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\nВідстань: {int(place['distance'])} метрів"
 
             if place['weekday_text']:
                 response += "\n\nГрафік роботи:"
+                print(place["weekday_text"])
                 for day_text in place['weekday_text']:
                     response += f"\n- {day_text}"
-
-            bot.send_message(message.chat.id, response)
+            map_link = generate_map_link(place)
+            bot.send_message(message.chat.id, response, reply_markup=types.InlineKeyboardMarkup(
+                [[types.InlineKeyboardButton(text="Відобразити на карті", url=map_link)]]
+            ))
     else:
         bot.send_message(message.chat.id, "Я не знаю де ви знаходитесь, надішліть вашу геолокацію")
         

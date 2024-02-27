@@ -64,7 +64,7 @@ def get_places(latitude, longitude, search_radius, keywords):
 
                     if details_data['status'] == 'OK':
                         result = details_data['result']
-
+                        print(result)
                         if 'opening_hours' in result:
                             opening_hours = result['opening_hours']
                             open_now = opening_hours.get('open_now', False)
@@ -75,7 +75,8 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "address": result.get('formatted_address'),
                                 "open_now": open_now,
                                 "weekday_text": weekday_text,
-                                "distance": distance 
+                                "distance": distance,
+                                #"rating": result['rating'],
                             }
 
                             places.append(place_data)
@@ -86,7 +87,8 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "address": result.get('formatted_address'),
                                 "open_now": None,
                                 "weekday_text": None,
-                                "distance": distance 
+                                "distance": distance,
+                                #"rating": result['rating'],
                             }
 
                             places.append(place_data)
@@ -114,6 +116,29 @@ def save_location(message):
     redis_client.set(message.chat.id, location_string)
     bot.send_message(message.chat.id, "Запам'ятав")
 
+@bot.message_handler(commands=['set_range'])
+def set_range(message):
+    args = message.text.split(' ')
+    if len(args) > 2:
+        bot.send_message(message.chat.id, f"Надто багато аргументів, спробуйте ще раз")
+    elif len(args) < 2:
+        bot.send_message(message.chat.id, f"Надто мало аргументів, спробуйте ще раз")
+    else:
+        try:
+            range = int(args[1])
+            if range < 250:
+                bot.send_message(message.chat.id, "Відстань не може біть менше ніж 250м")
+            elif range > 5000: 
+                bot.send_message(message.chat.id, "Відстань не може бути більше ніж 5000м")
+            else:
+                print(type(message.chat.id))
+                redis_client.set(str(message.chat.id) + "_range", range)
+                bot.send_message(message.chat.id, f"Запам'ятав, максимальна відстань - {range}")
+        except ValueError:
+            bot.send_message(message.chat.id, f"Щось пішло не так, введіть число")
+        
+        
+
 @bot.message_handler(commands=['search'])
 def search(message):
     location_string = redis_client.get(message.chat.id)
@@ -121,12 +146,11 @@ def search(message):
     if location_string:
         args = message.text.split(' ')
         if len(args) < 2:
-            bot.send_message(message.chat.id, "Введіть команду /search та через пробіл keywords.")
-            return
+            keywords = "кафе ресторан бар паб"
 
         keywords = ' '.join(args[1:])
         latitude, longitude = location_string.decode().split(',') 
-        search_radius = 250
+        search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
 
         places = get_places(latitude, longitude, search_radius, keywords)
 
@@ -134,8 +158,10 @@ def search(message):
             bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
             return
 
+        bot.send_message(message.chat.id, "Зачекайте трошки, збираю інформацію")
+
         for place in places:
-            response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\nВідстань: {int(place['distance'])} метрів"
+            response = f"Назва: {place['name']}\nАдреса: {place['address']}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\nВідстань: {int(place['distance'])} метрів"#\nРейтинг: {place['rating']}"
 
             if place['weekday_text']:
                 response += "\n\nГрафік роботи:"

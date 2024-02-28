@@ -273,7 +273,14 @@ def search(message):
                 ))
     else:
         logger.warning(f"Location not found for chat ID: {message.chat.id}")
-        bot.send_message(message.chat.id, "Я не знаю де ви знаходитесь, надішліть вашу геолокацію")
+        bot.send_message(message.chat.id, "Будь ласка, поділіться вашим місцезнаходженням для здійснення пошуку", 
+        reply_markup=types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, selective=True).add(types.KeyboardButton(text="Надіслати розташування", request_location=True)))
         
 if __name__ == '__main__':
-    bot.polling()
+    while True:
+        try:
+            bot.polling()
+        except Exception as e:  # Catch-all for unexpected crashes
+            logger.critical(f"Bot crashed: {e}")
+            # Potentially send an alert notification (email, etc.) here
+            time.sleep(5)  # Delay before restarting

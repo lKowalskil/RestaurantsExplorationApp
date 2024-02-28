@@ -151,10 +151,12 @@ logger.info("Bot commands is set")
 @bot.message_handler(commands=['start'])
 def start(message):
     logger.info(f"Received /start command from chat ID: {message.chat.id}")
+    redis_client.set(str(message.chat.id) + "_range", 300)
     bot.send_message(message.chat.id, 
                      """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
                      \nДля пошуку введіть команду /search та через пробіл keywords.
-                     \nНадішліть мені своє місцеположення, щоб я знав де шукати""")
+                     \nНадішліть мені своє місцеположення, щоб я знав де шукати
+                     \nТакож встановлено радіус пошуку 300 метрів по замовчуванню, ви можете виставити бажаний радіус командою /set_range""")
     logger.info(f"Sent start message to chat ID: {message.chat.id}")
 
 @bot.message_handler(content_types=['location'])
@@ -228,6 +230,8 @@ def search(message):
                 for day_text in place['weekday_text']:
                     if "Closed" in day_text:
                         response += f"\n- {day_text}"
+                    elif "Open 24 hours" in day_text:
+                        response += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}" 
                     else:
                         day_text = day_text.replace("\u202f", " ")
                         day_text = day_text.replace("\u2009", " ")

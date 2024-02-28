@@ -5,12 +5,13 @@ from telebot import TeleBot, types
 import redis
 import logging
 from geopy.distance import geodesic
-import urllib
-from bs4 import BeautifulSoup
 import re
 from googletrans import Translator
 
-logging.basicConfig(filename="logs.txt" ,format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logging.basicConfig(filename="logs.txt", 
+                    filemode="a", 
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+                    level=logging.DEBUG)
 logger = logging.getLogger(__name__)
 
 redis_client = redis.Redis()
@@ -20,8 +21,31 @@ translator = Translator()
 API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 def generate_map_link(place_id):
+    logger.debug(f"Generating map link for place ID: {place_id}")  
     map_url = f"https://www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}"
+    logger.debug(f"Generated map link: {map_url}") 
     return map_url
+
+def replace_weekdays(text):
+    logger.debug(f"Replacing weekdays in text: {text}")
+    weekdays = {
+        "Monday": "Понеділок",
+        "Tuesday": "Вівторок",
+        "Wednesday": "Середа",
+        "Thursday": "Четвер",
+        "Friday": "П'ятниця",
+        "Saturday": "Субота",
+        "Sunday": "Неділя",
+    }
+
+    for weekday, ukrainian_weekday in weekdays.items():
+        pattern = rf"\b{weekday}\b"
+        logger.debug(f"Replacing '{weekday}' with '{ukrainian_weekday}'")
+        text = re.sub(pattern, ukrainian_weekday, text, flags=re.IGNORECASE)
+
+    logger.debug(f"Weekday replacement completed. Text after replacement: {text}")
+    return text
+
 
 def get_places(latitude, longitude, search_radius, keywords):
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
@@ -34,24 +58,25 @@ def get_places(latitude, longitude, search_radius, keywords):
         "type": "|".join(place_types),
         "key": API_KEY,
     }
-
+    logger.debug(f"Nearby search parameters: {nearby_params}")
     nearby_response = requests.get(base_nearby_url, params=nearby_params)
 
     if nearby_response.status_code != 200:
-        print("Помилка запиту пошуку поблизу. Код відповіді:", nearby_response.status_code)
+        logger.error(f"Nearby search request failed. Response code: {nearby_response.status_code}")
         return []
-
     else:
+        logger.debug("Nearby search request successful.")
         nearby_data = nearby_response.json()
 
         if nearby_data['status'] == 'OK':
+            logger.info("Nearby search returned valid results.")
             places = []
 
             for place in nearby_data['results']:
                 place_id = place['place_id']
-
+                logger.debug(f"Fetching details for place ID: {place_id}")
+                
                 details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos&key={API_KEY}"
-
                 details_response = requests.get(details_url)
 
                 user_location = (latitude, longitude)
@@ -59,12 +84,13 @@ def get_places(latitude, longitude, search_radius, keywords):
                 distance = geodesic(user_location, place_location).meters 
                 
                 if details_response.status_code != 200:
-                    print(f"Помилка отримання деталей для {place['name']}: Код відповіді:", details_response.status_code)
+                    logger.warning(f"Details request for {place['name']} failed. Response code: {details_response.status_code}")
                     continue
 
                 else:
                     details_data = details_response.json()
                     if details_data['status'] == 'OK':
+                        logger.debug("Place details fetched successfully.")
                         result = details_data['result']
                         photo_url = None
                         if "photos" in result:
@@ -100,16 +126,17 @@ def get_places(latitude, longitude, search_radius, keywords):
                             }
 
                             places.append(place_data)
-
+            logger.info(f"Found {len(places)} places.")  
             return places
 
         else:
-            print("Результатів пошуку поблизу не знайдено.")
+            logger.warning(f"Nearby search response status: {nearby_data['status']}. No places found.")
             return []
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 bot = TeleBot(BOT_TOKEN)
+logger.info("Bot is started")
 
 commands = [
     types.BotCommand("start", "Почати роботу з ботом"),
@@ -119,59 +146,56 @@ commands = [
 ]
 
 bot.set_my_commands(commands)
+logger.info("Bot commands is set")
 
 @bot.message_handler(commands=['start'])
 def start(message):
+    logger.info(f"Received /start command from chat ID: {message.chat.id}")
     bot.send_message(message.chat.id, 
                      """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
                      \nДля пошуку введіть команду /search та через пробіл keywords.
                      \nНадішліть мені своє місцеположення, щоб я знав де шукати""")
+    logger.info(f"Sent start message to chat ID: {message.chat.id}")
 
 @bot.message_handler(content_types=['location'])
 def save_location(message):
+    logger.info(f"Received location from chat ID: {message.chat.id}. Location: ({message.location.latitude}, {message.location.longitude})")
     location_string = f"{message.location.latitude},{message.location.longitude}"
     redis_client.set(message.chat.id, location_string)
     bot.send_message(message.chat.id, "Запам'ятав")
+    logger.info(f"Location saved in Redis for chat ID: {message.chat.id}")
 
 @bot.message_handler(commands=['set_range'])
 def set_range(message):
+    logger.info(f"Received /set_range command from chat ID: {message.chat.id}")
     args = message.text.split(' ')
     if len(args) > 2:
+        logger.warning(f"Too many arguments received from chat ID: {message.chat.id}. Expected 1, received {len(args) - 1}.")
         bot.send_message(message.chat.id, f"Надто багато аргументів, спробуйте ще раз")
     elif len(args) < 2:
+        logger.warning(f"Too few arguments received from chat ID: {message.chat.id}. Expected 1, received {len(args) - 1}.")
         bot.send_message(message.chat.id, f"Надто мало аргументів, спробуйте ще раз")
     else:
         try:
             range = int(args[1])
+            logger.debug(f"Received search range: {range}")
             if range < 250:
+                logger.warning(f"Search range too low ({range}). Minimum range is 250m.")
                 bot.send_message(message.chat.id, "Відстань не може біть менше ніж 250м")
             elif range > 5000: 
+                logger.warning(f"Search range too high ({range}). Maximum range is 5000m.")
                 bot.send_message(message.chat.id, "Відстань не може бути більше ніж 5000м")
             else:
                 redis_client.set(str(message.chat.id) + "_range", range)
+                logger.info(f"Search range set to {range} for chat ID: {message.chat.id}")
                 bot.send_message(message.chat.id, f"Запам'ятав, максимальна відстань - {range}")
         except ValueError:
+            logger.error(f"Invalid range value received from chat ID: {message.chat.id}. Expected an integer, received '{args[1]}'.")
             bot.send_message(message.chat.id, f"Щось пішло не так, введіть число")
-        
-def replace_weekdays(text):
-  weekdays = {
-      "Monday": "Понеділок",
-      "Tuesday": "Вівторок",
-      "Wednesday": "Середа",
-      "Thursday": "Четвер",
-      "Friday": "П'ятниця",
-      "Saturday": "Субота",
-      "Sunday": "Неділя",
-  }
-
-  for weekday, ukrainian_weekday in weekdays.items():
-    pattern = rf"\b{weekday}\b"
-    text = re.sub(pattern, ukrainian_weekday, text, flags=re.IGNORECASE)
-
-  return text  
 
 @bot.message_handler(commands=['search'])
 def search(message):
+    logger.info(f"Received /search command from chat ID: {message.chat.id}")
     location_string = redis_client.get(message.chat.id)
     
     if location_string:
@@ -181,13 +205,17 @@ def search(message):
             keywords = "кафе ресторан бар паб"
 
         keywords = ' '.join(args[1:])
+        logger.info(f"Search keywords: {keywords}")
+        
         latitude, longitude = location_string.decode().split(',') 
         search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
 
+        logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
         places = get_places(latitude, longitude, search_radius, keywords)
 
         if not places:
             bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
+            logger.debug("No places found for the search query.")
             return
 
         for place in places:
@@ -229,15 +257,18 @@ def search(message):
             if place["photo_url"] is not None:
                 image_url = place["photo_url"]
                 filename = place["place_id"] + "_photo.jpg"
-
+                
+                logger.debug(f"Sending details for place: {place['name']}")
                 bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=types.InlineKeyboardMarkup(
                     [[types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link)]]
                 ))
             else:
+                logger.debug(f"Sending details for place: {place['name']}")
                 bot.send_message(message.chat.id, response, reply_markup=types.InlineKeyboardMarkup(
                     [[types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link)]]
                 ))
     else:
+        logger.warning(f"Location not found for chat ID: {message.chat.id}")
         bot.send_message(message.chat.id, "Я не знаю де ви знаходитесь, надішліть вашу геолокацію")
         
 if __name__ == '__main__':

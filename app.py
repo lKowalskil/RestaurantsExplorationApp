@@ -7,6 +7,7 @@ import logging
 from geopy.distance import geodesic
 import re
 from googletrans import Translator
+import time
 
 logging.basicConfig(filename="logs.txt", 
                     filemode="a", 
@@ -47,15 +48,17 @@ def replace_weekdays(text):
     return text
 
 
-def get_places(latitude, longitude, search_radius, keywords):
+def get_places(latitude, longitude, search_radius, keywords, type):
+    logger.info(f"Get places triggered {latitude}, {longitude}, {search_radius}, {keywords}, {type}")
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-    place_types = ["cafe", "restaurant"]
-
+    #place_types = ["restaurant"]
+    type = translator.translate(type, src='uk', dest='en').text.lower()
+    print(type)
     nearby_params = {
         "location": f"{latitude},{longitude}",
         "radius": search_radius,
         "keywords": keywords,
-        "type": "|".join(place_types),
+        "type": type,
         "key": API_KEY,
     }
     logger.debug(f"Nearby search parameters: {nearby_params}")
@@ -76,9 +79,8 @@ def get_places(latitude, longitude, search_radius, keywords):
                 place_id = place['place_id']
                 logger.debug(f"Fetching details for place ID: {place_id}")
                 
-                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos&key={API_KEY}"
+                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website&key={API_KEY}"
                 details_response = requests.get(details_url)
-
                 user_location = (latitude, longitude)
                 place_location = (place['geometry']['location']['lat'], place['geometry']['location']['lng'])
                 distance = geodesic(user_location, place_location).meters 
@@ -94,7 +96,7 @@ def get_places(latitude, longitude, search_radius, keywords):
                         result = details_data['result']
                         photo_url = None
                         if "photos" in result:
-                            photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth={result['photos'][1]['width']+ 1}&photo_reference={result['photos'][1]['photo_reference']}&key={API_KEY}"
+                            photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth={result['photos'][0]['width']+ 1}&photo_reference={result['photos'][0]['photo_reference']}&key={API_KEY}"
                         if 'opening_hours' in result:
                             opening_hours = result['opening_hours']
                             open_now = opening_hours.get('open_now', False)
@@ -107,8 +109,10 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "weekday_text": weekday_text,
                                 "distance": distance,
                                 "rating": result['rating'] if 'rating' in result else None,
+                                "price_level": result["price_level"] if "price_level" in result else None,
                                 "place_id" : result["place_id"],
-                                "photo_url": photo_url
+                                "photo_url": photo_url,
+                                "website": result["website"] if "website" in result else None
                             }
 
                             places.append(place_data)
@@ -121,8 +125,10 @@ def get_places(latitude, longitude, search_radius, keywords):
                                 "weekday_text": None,
                                 "distance": distance,
                                 "rating": result['rating'] if 'rating' in result else None,
+                                "price_level": result["price_level"] if "price_level" in result else None,
                                 "place_id" : result["place_id"],
-                                "photo_url": photo_url
+                                "photo_url": photo_url,
+                                "website": result["website"] if "website" in result else None
                             }
 
                             places.append(place_data)
@@ -138,149 +144,194 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = TeleBot(BOT_TOKEN)
 logger.info("Bot is started")
 
-commands = [
-    types.BotCommand("start", "Почати роботу з ботом"),
-    types.BotCommand("search", "Знайти кафе або ресторан"),
-    types.BotCommand("set_range", "Виставити максимальну відстань до закладу (250м-5000м)"),
-    types.BotCommand("settings", "Змінити налаштування"),
-]
+start_keyboard_list = ["Пошук закладів", "Налаштування"]
+start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in start_keyboard_list:
+    start_keyboard.add(types.KeyboardButton(text=button))
 
-bot.set_my_commands(commands)
-logger.info("Bot commands is set")
+location_keyboard_button_list = ["Змінити радіус пошуку"]
+settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in location_keyboard_button_list:
+    settings_keyboard.add(types.KeyboardButton(text=button))
+
+location_keyboard_buttons_list = ["Пошук закладів", "Налаштування"]
+location_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in location_keyboard_buttons_list:
+    location_keyboard.add(types.KeyboardButton(text=button))
+
+ranges_list = ["250", "500", "750", "1000", "1500", "2000", "2500", "3000", "3500", "4500", "5000"]
+set_range_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+ranges_chunks = [ranges_list[i:i+2] for i in range(0, len(ranges_list), 2)]
+for chunk in ranges_chunks[:-1]:
+    set_range_keyboard.add(types.KeyboardButton(text=chunk[0]), types.KeyboardButton(text=chunk[1]))
+if len(ranges_list) % 2 != 0:
+    last_chunk = ranges_chunks[-1]
+    set_range_keyboard.add(types.KeyboardButton(text=last_chunk[0]))
+
+search_option_keyboard_buttons_list = ["Кафе", "Ресторан", "Бар"]
+search_option_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in search_option_keyboard_buttons_list:
+    search_option_keyboard.add(types.KeyboardButton(text=button))
+
 
 @bot.message_handler(commands=['start'])
 def start(message):
-    logger.info(f"Received /start command from chat ID: {message.chat.id}")
     redis_client.set(str(message.chat.id) + "_range", 300)
     bot.send_message(message.chat.id, 
-                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. 
-                     \nДля пошуку введіть команду /search та через пробіл ключові слова для пошуку, або залиште порожнім, щоб шукати за замовчування \"кафе ресторан бар паб\".
-                     \nНадішліть мені своє місцеположення, щоб я знав де шукати
-                     \nТакож встановлено радіус пошуку 300 метрів по замовчуванню, ви можете виставити бажаний радіус командою /set_range""")
-    logger.info(f"Sent start message to chat ID: {message.chat.id}")
+                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
+                     Оберіть дію: """,
+                     reply_markup=start_keyboard)
 
 @bot.message_handler(content_types=['location'])
 def save_location(message):
-    logger.info(f"Received location from chat ID: {message.chat.id}. Location: ({message.location.latitude}, {message.location.longitude})")
     location_string = f"{message.location.latitude},{message.location.longitude}"
     redis_client.set(message.chat.id, location_string)
-    bot.send_message(message.chat.id, "Запам'ятав")
-    logger.info(f"Location saved in Redis for chat ID: {message.chat.id}")
-
-@bot.message_handler(commands=['set_range'])
-def set_range(message):
-    logger.info(f"Received /set_range command from chat ID: {message.chat.id}")
-    args = message.text.split(' ')
-    if len(args) > 2:
-        logger.warning(f"Too many arguments received from chat ID: {message.chat.id}. Expected 1, received {len(args) - 1}.")
-        bot.send_message(message.chat.id, f"Надто багато аргументів, спробуйте ще раз")
-    elif len(args) < 2:
-        logger.warning(f"Too few arguments received from chat ID: {message.chat.id}. Expected 1, received {len(args) - 1}.")
-        bot.send_message(message.chat.id, f"Надто мало аргументів, спробуйте ще раз")
-    else:
-        try:
-            range = int(args[1])
-            logger.debug(f"Received search range: {range}")
-            if range < 250:
-                logger.warning(f"Search range too low ({range}). Minimum range is 250m.")
-                bot.send_message(message.chat.id, "Відстань не може біть менше ніж 250м")
-            elif range > 5000: 
-                logger.warning(f"Search range too high ({range}). Maximum range is 5000m.")
-                bot.send_message(message.chat.id, "Відстань не може бути більше ніж 5000м")
-            else:
-                redis_client.set(str(message.chat.id) + "_range", range)
-                logger.info(f"Search range set to {range} for chat ID: {message.chat.id}")
-                bot.send_message(message.chat.id, f"Запам'ятав, максимальна відстань - {range}")
-        except ValueError:
-            logger.error(f"Invalid range value received from chat ID: {message.chat.id}. Expected an integer, received '{args[1]}'.")
-            bot.send_message(message.chat.id, f"Щось пішло не так, введіть число")
-
-@bot.message_handler(commands=['search'])
-def search(message):
-    logger.info(f"Received /search command from chat ID: {message.chat.id}")
-    location_string = redis_client.get(message.chat.id)
+    bot.send_message(message.chat.id, "Запам'ятав", reply_markup=location_keyboard)
     
-    if location_string:
-        args = message.text.split(' ')
-        bot.send_message(message.chat.id, "Зачекайте трошки, збираю інформацію")
-        if len(args) < 2:
-            keywords = "кафе ресторан бар паб"
+@bot.message_handler(content_types=['text']) 
+def handle_settings(message):
+    if message.text == "Налаштування":
+        bot.send_message(message.chat.id, "Оберіть налаштування:", reply_markup=settings_keyboard)
+    elif message.text == "Пошук закладів":
+        bot.send_message(message.chat.id, "Оберіть тип закладу для пошуку:", reply_markup=search_option_keyboard)
+        bot.register_next_step_handler(message, handle_keywords_for_search)
+    elif message.text == "Змінити радіус пошуку":
+        bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
+    elif message.text == "Змінити ключові слова за замовчуванням":
+        bot.send_message(message.chat.id, "Введіть ключові слова за замовчуванням")
+        bot.register_next_step_handler(message, save_default_keywords)
+    elif message.text in ranges_list:
+        bot.send_message(message.chat.id, "Обрано", reply_markup=start_keyboard)
+        try:
+            redis_client.set(str(message.chat.id) + "_range", int(message.text))
+        except ValueError:
+            bot.send_message(message.chat.id, "Виникла помилка, спробуйте ще раз", reply_markup=start_keyboard)
+    
+    else:
+        bot.send_message(message.chat.id, "Такої команди не існує, почніть заново", reply_markup=start_keyboard)
 
-        keywords = ' '.join(args[1:])
-        logger.info(f"Search keywords: {keywords}")
+def save_default_keywords(message):
+    keywords = message.text
+    #redis_client.set(str(message.chat.id) + "_default_keywords", keywords)
+    bot.send_message(message.chat.id, "Ключові слова за замовчуванням збережено!", reply_markup=start_keyboard)
+
+"""def handle_search_option(message):
+    if message.text == "За замовчуванням":
+        search(message)
+    elif message.text == "Ввести вручну":
+        bot.send_message(message.chat.id, "Введіть бажані ключові слова для пошуку:")
+        bot.register_next_step_handler(message, handle_keywords_for_search)"""
         
-        latitude, longitude = location_string.decode().split(',') 
-        search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
+def handle_keywords_for_search(message):
+    if message.text in search_option_keyboard_buttons_list:
+        search(message, type=message.text)
 
-        logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
-        places = get_places(latitude, longitude, search_radius, keywords)
+def search(message, keywords=None, type=None):
+    logger.info(f"Search triggered, keywords:{keywords}, type:{type}")
+    if message.location:
+        location_string = f"{message.location.latitude},{message.location.longitude}"
+        redis_client.set(message.chat.id, location_string)
+        
+    location_string = redis_client.get(message.chat.id)
+    if location_string:
+        bot.send_message(message.chat.id, "Зачекайте трошки, збираю інформацію", reply_markup=types.ReplyKeyboardRemove())
+        try:
+            """ if not keywords:
+                try:
+                    keywords = str(redis_client.get(str(message.chat.id)+"_default_keywords"))
+                    translated_address = translator.translate(address, src='uk', dest='en').text
+                except Exception as e:
+                    logger.error(f"Error while retrieving default_keywords {e}")"""
+            if not type:
+                logger.error("No type specified")
+                type="cafe"
+            
+            logger.info(f"Search keywords: {keywords}")
+            
+            latitude, longitude = location_string.decode().split(',') 
+            search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
 
-        if not places:
-            bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.")
-            logger.debug("No places found for the search query.")
-            return
+            logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
+            places = get_places(latitude, longitude, search_radius, keywords, type=type)
 
-        for place in places:
-            address = str(place['address'])
-            translated_address = translator.translate(address, src='en', dest='uk').text
-            response = f"Назва: {place['name']}\nАдреса: {translated_address}\nСтатус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\nВідстань: {int(place['distance'])} метрів\nРейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
+            if not places:
+                bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
+                logger.debug("No places found for the search query.")
+                return
+            try:
+                places = sorted(places, key=lambda x: x["distance"])
+            except:
+                pass
+            for place in places:
+                address = str(place['address'])
+                translated_address = translator.translate(address, src='en', dest='uk').text
+                response = (f"Назва: {place['name']}\nАдреса: {translated_address}\n"
+                            f"Статус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\n"
+                            f"Відстань: {int(place['distance'])} метрів"
+                            f"\nРейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
+                            + (f"\nРівень Ціни: {place['price_level']}" if place['price_level'] is not None else ''))
+                if place['weekday_text']:
+                    response += "\n\nГрафік роботи:"
+                    for day_text in place['weekday_text']:
+                        if "Closed" in day_text:
+                            response += f"\n- {day_text}"
+                        elif "Open 24 hours" in day_text:
+                            response += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}" 
+                        else:
+                            day_text = day_text.replace("\u202f", " ")
+                            day_text = day_text.replace("\u2009", " ")
+                            parts = day_text.split('–')
+                            time1_str = parts[0].strip()
+                            time1_str = time1_str.split(":")
+                            time1_str = time1_str[1].replace(" ", "") + ":" + time1_str[2]
+                            time2_str = parts[1].strip()
 
-            if place['weekday_text']:
-                response += "\n\nГрафік роботи:"
-                for day_text in place['weekday_text']:
-                    if "Closed" in day_text:
-                        response += f"\n- {day_text}"
-                    elif "Open 24 hours" in day_text:
-                        response += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}" 
-                    else:
-                        day_text = day_text.replace("\u202f", " ")
-                        day_text = day_text.replace("\u2009", " ")
-                        parts = day_text.split('–')
-                        time1_str = parts[0].strip()
-                        time1_str = time1_str.split(":")
-                        time1_str = time1_str[1].replace(" ", "") + ":" + time1_str[2]
-                        time2_str = parts[1].strip()
+                            try:
+                                time1_obj = datetime.datetime.strptime(time1_str, '%I:%M %p')
+                                time1_24hour = time1_obj.strftime('%H:%M')
+                            except ValueError:
+                                time1_24hour = time1_str
+                            
+                            try:
+                                time2_obj = datetime.datetime.strptime(time2_str, '%I:%M %p')
+                                time2_24hour = time2_obj.strftime('%H:%M')
+                            except ValueError:
+                                time2_24hour = time2_str
 
-                        try:
-                            time1_obj = datetime.datetime.strptime(time1_str, '%I:%M %p')
-                            time1_24hour = time1_obj.strftime('%H:%M')
-                        except ValueError:
-                            time1_24hour = time1_str
-                        
-                        try:
-                            time2_obj = datetime.datetime.strptime(time2_str, '%I:%M %p')
-                            time2_24hour = time2_obj.strftime('%H:%M')
-                        except ValueError:
-                            time2_24hour = time2_str
+                            response += f"\n- " + f"{day_text.split(':')[0]}: {time1_24hour} - {time2_24hour}"
+                else:
+                    response += "\nГрафік роботи невідомий :("
+                response = replace_weekdays(response).replace("Closed", "Зачинено")
+                map_link = generate_map_link(place["place_id"])
+                inline_keyboard = types.InlineKeyboardMarkup()
+                inline_keyboard.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                if "website" in place:
+                    if place["website"] is not None:
+                        inline_keyboard.add(types.InlineKeyboardButton(text="Веб-сайт", url=place["website"]))
 
-                        response += f"\n- " + f"{day_text.split(':')[0]}: {time1_24hour} - {time2_24hour}"
-            else:
-                response += "\nГрафік роботи невідомий :("
-            response = replace_weekdays(response).replace("Closed", "Зачинено")
-            map_link = generate_map_link(place["place_id"])
-            if place["photo_url"] is not None:
-                image_url = place["photo_url"]
-                filename = place["place_id"] + "_photo.jpg"
-                
-                logger.debug(f"Sending details for place: {place['name']}")
-                bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=types.InlineKeyboardMarkup(
-                    [[types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link)]]
-                ))
-            else:
-                logger.debug(f"Sending details for place: {place['name']}")
-                bot.send_message(message.chat.id, response, reply_markup=types.InlineKeyboardMarkup(
-                    [[types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link)]]
-                ))
+                if place["photo_url"] is not None:
+                    image_url = place["photo_url"]
+                    filename = place["place_id"] + "_photo.jpg"
+                    logger.debug(f"Sending details for place: {place['name']}")
+                    bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=inline_keyboard)
+                else:
+                    logger.debug(f"Sending details for place: {place['name']}")
+                    bot.send_message(message.chat.id, response, reply_markup=inline_keyboard)
+            bot.send_message(message.chat.id, "Оберіть дію:", reply_markup=start_keyboard)
+            redis_client.delete(message.chat.id)
+        except Exception as e:
+            bot.send_message(message.chat.id, "Виникла помилка, почніть заново", reply_markup=start_keyboard)
+            logger.error(f"Error : {e}")
     else:
         logger.warning(f"Location not found for chat ID: {message.chat.id}")
         bot.send_message(message.chat.id, "Будь ласка, поділіться вашим місцезнаходженням для здійснення пошуку", 
         reply_markup=types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, selective=True).add(types.KeyboardButton(text="Надіслати розташування", request_location=True)))
+        bot.register_next_step_handler(message, search, keywords, type)
         
 if __name__ == '__main__':
     while True:
         try:
             bot.polling()
-        except Exception as e:  # Catch-all for unexpected crashes
+        except Exception as e: 
             logger.critical(f"Bot crashed: {e}")
-            # Potentially send an alert notification (email, etc.) here
-            time.sleep(5)  # Delay before restarting
+            time.sleep(2) 

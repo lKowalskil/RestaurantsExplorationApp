@@ -162,7 +162,7 @@ start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboa
 for button in start_keyboard_list:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-location_keyboard_button_list = ["Змінити радіус пошуку", "Фільтри"]
+location_keyboard_button_list = ["Змінити радіус пошуку"]#, "Фільтри"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_button_list:
     settings_keyboard.add(types.KeyboardButton(text=button))
@@ -216,8 +216,6 @@ def handle_settings(message):
         bot.register_next_step_handler(message, handle_keywords_for_search)
     elif message.text == "Змінити радіус пошуку":
         bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
-    elif message.text == "Фільтри":
-        
     elif message.text in ranges_list:
         bot.send_message(message.chat.id, "Обрано", reply_markup=start_keyboard)
         try:
@@ -276,13 +274,13 @@ def search(message, keywords=None, type=None):
                             f"Відстань: {int(place['distance'])} метрів"
                             f"\nРейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
                             + (f"\nРівень Ціни: {place['price_level']}" if place['price_level'] is not None else '') + 
-                            f"\nПодають пиво: {'Так' if place.get('serves_beer', False) else 'Ні' if 'serves_beer' in place else 'невідомо'}"
-                            f"\nПодають вино: {'Так' if place.get('serves_wine', False) else 'Ні' if 'serves_wine' in place else 'невідомо'}"
-                            f"\nПодають сніданок: {'Так' if place.get('serves_breakfast', False) else 'Ні' if 'serves_breakfast' in place else 'невідомо'}"
-                            f"\nПодають бранч: {'Так' if place.get('serves_brunch', False) else 'Ні' if 'serves_brunch' in place else 'невідомо'}"
+                            #f"\nПодають пиво: {'Так' if place.get('serves_beer', False) else 'Ні' if 'serves_beer' in place else 'невідомо'}"
+                            #f"\nПодають вино: {'Так' if place.get('serves_wine', False) else 'Ні' if 'serves_wine' in place else 'невідомо'}"
+                            #f"\nПодають сніданок: {'Так' if place.get('serves_breakfast', False) else 'Ні' if 'serves_breakfast' in place else 'невідомо'}"
+                            #f"\nПодають бранч: {'Так' if place.get('serves_brunch', False) else 'Ні' if 'serves_brunch' in place else 'невідомо'}"
                             f"\nПодають обід: {'Так' if place.get('serves_lunch', False) else 'Ні' if 'serves_lunch' in place else 'невідомо'}"
-                            f"\nПодають вечерю:{'Так' if place.get('serves_dinner', False) else 'Ні' if 'serves_dinner' in place else 'невідомо'}"
-                            f"\nПодають вегетаріанську їжу: {'Так' if place.get('serves_vegetarian_food', False) else 'Ні' if 'serves_vegetarian_food' in place else 'невідомо'}"
+                            #f"\nПодають вечерю:{'Так' if place.get('serves_dinner', False) else 'Ні' if 'serves_dinner' in place else 'невідомо'}"
+                            #f"\nПодають вегетаріанську їжу: {'Так' if place.get('serves_vegetarian_food', False) else 'Ні' if 'serves_vegetarian_food' in place else 'невідомо'}"
                             )
                 if place['weekday_text']:
                     response += "\n\nГрафік роботи:"

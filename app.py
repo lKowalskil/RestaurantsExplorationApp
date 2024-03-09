@@ -78,7 +78,7 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                 place_id = place['place_id']
                 logger.debug(f"Fetching details for place ID: {place_id}")
                 
-                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website&key={API_KEY}"
+                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine&key={API_KEY}"
                 details_response = requests.get(details_url)
                 user_location = (latitude, longitude)
                 place_location = (place['geometry']['location']['lat'], place['geometry']['location']['lng'])
@@ -111,7 +111,14 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                                 "price_level": result["price_level"] if "price_level" in result else None,
                                 "place_id" : result["place_id"],
                                 "photo_url": photo_url,
-                                "website": result["website"] if "website" in result else None
+                                "website": result["website"] if "website" in result else None,
+                                "serves_beer": result["serves_beer"] if "serves_beer" in result else None,
+                                "serves_breakfast": result["serves_breakfast"] if "serves_breakfast" in result else None,
+                                "serves_brunch": result["serves_brunch"] if "serves_brunch" in result else None,
+                                "serves_dinner": result["serves_dinner"] if "serves_dinner" in result else None,
+                                "serves_lunch": result["serves_lunch"] if "serves_lunch" in result else None,
+                                "serves_vegetarian_food": result["serves_vegetarian_food"] if "serves_vegetarian_food" in result else None,
+                                "serves_wine": result["serves_wine"] if "serves_wine" in result else None
                             }
 
                             places.append(place_data)
@@ -127,7 +134,14 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                                 "price_level": result["price_level"] if "price_level" in result else None,
                                 "place_id" : result["place_id"],
                                 "photo_url": photo_url,
-                                "website": result["website"] if "website" in result else None
+                                "website": result["website"] if "website" in result else None,
+                                "serves_beer": result["serves_beer"] if "serves_beer" in result else None,
+                                "serves_breakfast": result["serves_breakfast"] if "serves_breakfast" in result else None,
+                                "serves_brunch": result["serves_brunch"] if "serves_brunch" in result else None,
+                                "serves_dinner": result["serves_dinner"] if "serves_dinner" in result else None,
+                                "serves_lunch": result["serves_lunch"] if "serves_lunch" in result else None,
+                                "serves_vegetarian_food": result["serves_vegetarian_food"] if "serves_vegetarian_food" in result else None,
+                                "serves_wine": result["serves_wine"] if "serves_wine" in result else None
                             }
 
                             places.append(place_data)
@@ -148,10 +162,16 @@ start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboa
 for button in start_keyboard_list:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-location_keyboard_button_list = ["Змінити радіус пошуку"]
+location_keyboard_button_list = ["Змінити радіус пошуку", "Фільтри"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_button_list:
     settings_keyboard.add(types.KeyboardButton(text=button))
+    
+filters_keyboard_button_list = ['Подають пиво', 'Подають вино', 'Подають сніданок', 'Подають бранч', 'Подають обід', 'Подають вечерю', 'Подають вегетаріанську їжу']
+filters_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in filters_keyboard_button_list:
+    filters_keyboard.add(types.KeyboardButton(text=button))
+
 
 location_keyboard_buttons_list = ["Пошук закладів", "Налаштування"]
 location_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -196,9 +216,8 @@ def handle_settings(message):
         bot.register_next_step_handler(message, handle_keywords_for_search)
     elif message.text == "Змінити радіус пошуку":
         bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
-    elif message.text == "Змінити ключові слова за замовчуванням":
-        bot.send_message(message.chat.id, "Введіть ключові слова за замовчуванням")
-        bot.register_next_step_handler(message, save_default_keywords)
+    elif message.text == "Фільтри":
+        
     elif message.text in ranges_list:
         bot.send_message(message.chat.id, "Обрано", reply_markup=start_keyboard)
         try:
@@ -208,18 +227,6 @@ def handle_settings(message):
     
     else:
         bot.send_message(message.chat.id, "Такої команди не існує, почніть заново", reply_markup=start_keyboard)
-
-def save_default_keywords(message):
-    keywords = message.text
-    #redis_client.set(str(message.chat.id) + "_default_keywords", keywords)
-    bot.send_message(message.chat.id, "Ключові слова за замовчуванням збережено!", reply_markup=start_keyboard)
-
-"""def handle_search_option(message):
-    if message.text == "За замовчуванням":
-        search(message)
-    elif message.text == "Ввести вручну":
-        bot.send_message(message.chat.id, "Введіть бажані ключові слова для пошуку:")
-        bot.register_next_step_handler(message, handle_keywords_for_search)"""
         
 def handle_keywords_for_search(message):
     if message.text in search_option_keyboard_buttons_list:
@@ -268,7 +275,15 @@ def search(message, keywords=None, type=None):
                             f"Статус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\n"
                             f"Відстань: {int(place['distance'])} метрів"
                             f"\nРейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
-                            + (f"\nРівень Ціни: {place['price_level']}" if place['price_level'] is not None else ''))
+                            + (f"\nРівень Ціни: {place['price_level']}" if place['price_level'] is not None else '') + 
+                            f"\nПодають пиво: {'Так' if place.get('serves_beer', False) else 'Ні' if 'serves_beer' in place else 'невідомо'}"
+                            f"\nПодають вино: {'Так' if place.get('serves_wine', False) else 'Ні' if 'serves_wine' in place else 'невідомо'}"
+                            f"\nПодають сніданок: {'Так' if place.get('serves_breakfast', False) else 'Ні' if 'serves_breakfast' in place else 'невідомо'}"
+                            f"\nПодають бранч: {'Так' if place.get('serves_brunch', False) else 'Ні' if 'serves_brunch' in place else 'невідомо'}"
+                            f"\nПодають обід: {'Так' if place.get('serves_lunch', False) else 'Ні' if 'serves_lunch' in place else 'невідомо'}"
+                            f"\nПодають вечерю:{'Так' if place.get('serves_dinner', False) else 'Ні' if 'serves_dinner' in place else 'невідомо'}"
+                            f"\nПодають вегетаріанську їжу: {'Так' if place.get('serves_vegetarian_food', False) else 'Ні' if 'serves_vegetarian_food' in place else 'невідомо'}"
+                            )
                 if place['weekday_text']:
                     response += "\n\nГрафік роботи:"
                     for day_text in place['weekday_text']:

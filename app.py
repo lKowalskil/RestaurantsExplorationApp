@@ -53,7 +53,6 @@ def get_places(latitude, longitude, search_radius, keywords, type):
     base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
     #place_types = ["restaurant"]
     type = translator.translate(type, src='uk', dest='en').text.lower()
-    print(type)
     nearby_params = {
         "location": f"{latitude},{longitude}",
         "radius": search_radius,

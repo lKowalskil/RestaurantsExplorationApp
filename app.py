@@ -9,7 +9,7 @@ import re
 from googletrans import Translator
 import time
 
-logging.basicConfig(filename="logs.txt", 
+logging.basicConfig(#filename="logs.txt", 
                     filemode="a", 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
                     level=logging.DEBUG)
@@ -78,7 +78,7 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                 place_id = place['place_id']
                 logger.debug(f"Fetching details for place ID: {place_id}")
                 
-                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine&key={API_KEY}"
+                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine,reservable,icon,delivery,reviews&key={API_KEY}"
                 details_response = requests.get(details_url)
                 user_location = (latitude, longitude)
                 place_location = (place['geometry']['location']['lat'], place['geometry']['location']['lng'])
@@ -171,7 +171,6 @@ filters_keyboard_button_list = ['Подають пиво', 'Подають ви�
 filters_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in filters_keyboard_button_list:
     filters_keyboard.add(types.KeyboardButton(text=button))
-
 
 location_keyboard_buttons_list = ["Пошук закладів", "Налаштування"]
 location_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -271,16 +270,16 @@ def search(message, keywords=None, type=None):
                 translated_address = translator.translate(address, src='en', dest='uk').text
                 response = (f"Назва: {place['name']}\nАдреса: {translated_address}\n"
                             f"Статус роботи: {'Відкрито' if place['open_now'] else 'Закрито'}\n"
-                            f"Відстань: {int(place['distance'])} метрів"
-                            f"\nРейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
+                            f"Відстань: {int(place['distance'])} метрів\n"
+                            f"Рейтинг: {place['rating'] if place['rating'] is not None else 'Невідомо'}"
                             + (f"\nРівень Ціни: {place['price_level']}" if place['price_level'] is not None else '') + 
-                            #f"\nПодають пиво: {'Так' if place.get('serves_beer', False) else 'Ні' if 'serves_beer' in place else 'невідомо'}"
-                            #f"\nПодають вино: {'Так' if place.get('serves_wine', False) else 'Ні' if 'serves_wine' in place else 'невідомо'}"
-                            #f"\nПодають сніданок: {'Так' if place.get('serves_breakfast', False) else 'Ні' if 'serves_breakfast' in place else 'невідомо'}"
-                            #f"\nПодають бранч: {'Так' if place.get('serves_brunch', False) else 'Ні' if 'serves_brunch' in place else 'невідомо'}"
-                            f"\nПодають обід: {'Так' if place.get('serves_lunch', False) else 'Ні' if 'serves_lunch' in place else 'невідомо'}"
-                            #f"\nПодають вечерю:{'Так' if place.get('serves_dinner', False) else 'Ні' if 'serves_dinner' in place else 'невідомо'}"
-                            #f"\nПодають вегетаріанську їжу: {'Так' if place.get('serves_vegetarian_food', False) else 'Ні' if 'serves_vegetarian_food' in place else 'невідомо'}"
+                            f"{'Подають пиво' if place.get('serves_beer', False) else ''}"
+                            f"{'Подають вино' if place.get('serves_wine', False) else ''}"
+                            f"{'Подають сніданок' if place.get('serves_breakfast', False) else ''}"
+                            f"{'Подають бранч' if place.get('serves_brunch', False) else ''}"
+                            f"{'Подають обід' if place.get('serves_lunch', False) else ''}"
+                            f"{'Подають вечерю' if place.get('serves_dinner', False) else ''}"
+                            f"{'Подають вегетаріанську їжу' if place.get('serves_vegetarian_food', False) else ''}"
                             )
                 if place['weekday_text']:
                     response += "\n\nГрафік роботи:"
@@ -297,19 +296,16 @@ def search(message, keywords=None, type=None):
                             time1_str = time1_str.split(":")
                             time1_str = time1_str[1].replace(" ", "") + ":" + time1_str[2]
                             time2_str = parts[1].strip()
-
                             try:
                                 time1_obj = datetime.datetime.strptime(time1_str, '%I:%M %p')
                                 time1_24hour = time1_obj.strftime('%H:%M')
                             except ValueError:
                                 time1_24hour = time1_str
-                            
                             try:
                                 time2_obj = datetime.datetime.strptime(time2_str, '%I:%M %p')
                                 time2_24hour = time2_obj.strftime('%H:%M')
                             except ValueError:
                                 time2_24hour = time2_str
-
                             response += f"\n- " + f"{day_text.split(':')[0]}: {time1_24hour} - {time2_24hour}"
                 else:
                     response += "\nГрафік роботи невідомий :("

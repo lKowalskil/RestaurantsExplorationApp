@@ -3,7 +3,6 @@ import os
 import math
 import folium
 import mysql.connector
-import time
 
 API_KEY = os.environ.get("GOOGLE_API_KEY")
 

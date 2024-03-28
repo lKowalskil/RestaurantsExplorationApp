@@ -5,9 +5,12 @@ from telebot import TeleBot, types
 import redis
 import logging
 from geopy.distance import geodesic
+import mysql.connector
 import re
 from googletrans import Translator
+from math import radians, sin, cos, sqrt, atan2
 import time
+import json
 
 logging.basicConfig(#filename="logs.txt", 
                     filemode="a", 
@@ -19,13 +22,62 @@ redis_client = redis.Redis()
 
 translator = Translator()
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
+db_connection = mysql.connector.connect(
+    host="localhost",
+    user="root",
+    password=os.environ.get("MYSQL_PASSWORD"),
+    database="PlacesExploraion"
+)
 
 def generate_map_link(place_id):
     logger.debug(f"Generating map link for place ID: {place_id}")  
     map_url = f"https://www.google.com/maps/search/?api=1&query=Google&query_place_id={place_id}"
     logger.debug(f"Generated map link: {map_url}") 
     return map_url
+
+def haversine(lat1, lon1, lat2, lon2):
+    
+    lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
+
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = sin(dlat / 2) ** 2 + cos(lat1) * cos(lat2) * sin(dlon / 2) ** 2
+    c = 2 * atan2(sqrt(a), sqrt(1 - a))
+    distance = 6371 * c * 1000
+    return distance
+
+def is_in_range(user_lat, user_lon, place_lat, place_lon, range_meters):
+    distance = haversine(user_lat, user_lon, place_lat, place_lon)
+    return distance <= range_meters
+
+def compute_distance(lat1, lon1, lat2, lon2):
+    point1 = (lat1, lon1)
+    
+    point2 = (lat2, lon2)
+    
+    distance = geodesic(point1, point2).meters
+    return distance
+
+def get_places_in_bounding_box(user_lat, user_lon, range_meters):
+    lat_delta = range_meters / 111111 
+    lon_delta = range_meters / (111111 * cos(radians(user_lat))) 
+    min_lat = user_lat - lat_delta
+    max_lat = user_lat + lat_delta
+    min_lon = user_lon - lon_delta
+    max_lon = user_lon + lon_delta
+
+    cursor = db_connection.cursor()
+
+    query = """
+    SELECT place_id, latitude, longitude
+    FROM Places
+    WHERE latitude BETWEEN %s AND %s
+    AND longitude BETWEEN %s AND %s
+    """
+    cursor.execute(query, (min_lat, max_lat, min_lon, max_lon))
+    places_in_bounding_box = cursor.fetchall()
+
+    return places_in_bounding_box
 
 def replace_weekdays(text):
     logger.debug(f"Replacing weekdays in text: {text}")
@@ -47,111 +99,68 @@ def replace_weekdays(text):
     logger.debug(f"Weekday replacement completed. Text after replacement: {text}")
     return text
 
+def is_open_now(data):
+    now = datetime.datetime.now()
+    current_day = now.weekday()  
+    current_time = now.strftime("%H%M")
+
+    for period in data["periods"]:
+        if period["open"]["day"] <= current_day:  
+            if "close" in period and period["close"]["day"] >= current_day: 
+                if period["open"]["day"] > period["close"]["day"]:
+                    if current_time >= period["open"]["time"] or current_time < period["close"]["time"]:
+                        return True                
+                else:
+                    if current_time >= period["open"]["time"]:
+                        return True
+            else:
+                return True
+
+    return False
 
 def get_places(latitude, longitude, search_radius, keywords, type):
     logger.info(f"Get places triggered {latitude}, {longitude}, {search_radius}, {keywords}, {type}")
-    base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"
-    #place_types = ["restaurant"]
-    type = translator.translate(type, src='uk', dest='en').text.lower()
-    nearby_params = {
-        "location": f"{latitude},{longitude}",
-        "radius": search_radius,
-        "keywords": keywords,
-        "type": type,
-        "key": API_KEY,
-    }
-    logger.debug(f"Nearby search parameters: {nearby_params}")
-    nearby_response = requests.get(base_nearby_url, params=nearby_params)
-
-    if nearby_response.status_code != 200:
-        logger.error(f"Nearby search request failed. Response code: {nearby_response.status_code}")
-        return []
-    else:
-        logger.debug("Nearby search request successful.")
-        nearby_data = nearby_response.json()
-
-        if nearby_data['status'] == 'OK':
-            logger.info("Nearby search returned valid results.")
-            places = []
-
-            for place in nearby_data['results']:
-                place_id = place['place_id']
-                logger.debug(f"Fetching details for place ID: {place_id}")
-                
-                details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=opening_hours,formatted_address,rating,place_id,photos,price_level,website,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine,reservable,icon,delivery,reviews&key={API_KEY}"
-                details_response = requests.get(details_url)
-                user_location = (latitude, longitude)
-                place_location = (place['geometry']['location']['lat'], place['geometry']['location']['lng'])
-                distance = geodesic(user_location, place_location).meters 
-                
-                if details_response.status_code != 200:
-                    logger.warning(f"Details request for {place['name']} failed. Response code: {details_response.status_code}")
-                    continue
-
-                else:
-                    details_data = details_response.json()
-                    if details_data['status'] == 'OK':
-                        logger.debug("Place details fetched successfully.")
-                        result = details_data['result']
-                        photo_url = None
-                        if "photos" in result:
-                            photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth={result['photos'][0]['width']+ 1}&photo_reference={result['photos'][0]['photo_reference']}&key={API_KEY}"
-                        if 'opening_hours' in result:
-                            opening_hours = result['opening_hours']
-                            open_now = opening_hours.get('open_now', False)
-                            weekday_text = opening_hours.get('weekday_text', [])
-
-                            place_data = {
-                                "name": place['name'],
-                                "address": result.get('formatted_address'),
-                                "open_now": open_now,
-                                "weekday_text": weekday_text,
-                                "distance": distance,
-                                "rating": result['rating'] if 'rating' in result else None,
-                                "price_level": result["price_level"] if "price_level" in result else None,
-                                "place_id" : result["place_id"],
-                                "photo_url": photo_url,
-                                "website": result["website"] if "website" in result else None,
-                                "serves_beer": result["serves_beer"] if "serves_beer" in result else None,
-                                "serves_breakfast": result["serves_breakfast"] if "serves_breakfast" in result else None,
-                                "serves_brunch": result["serves_brunch"] if "serves_brunch" in result else None,
-                                "serves_dinner": result["serves_dinner"] if "serves_dinner" in result else None,
-                                "serves_lunch": result["serves_lunch"] if "serves_lunch" in result else None,
-                                "serves_vegetarian_food": result["serves_vegetarian_food"] if "serves_vegetarian_food" in result else None,
-                                "serves_wine": result["serves_wine"] if "serves_wine" in result else None
-                            }
-
-                            places.append(place_data)
-
+    places_in_bounding_box = get_places_in_bounding_box(latitude, longitude, search_radius)
+    places = []
+    for place_id, place_lat, place_lon in places_in_bounding_box:
+        if is_in_range(latitude, longitude, place_lat, place_lon, search_radius):
+                query = f"SELECT place_id, latitude, longitude, name, formatted_address, weekday_text, rating, price_level, url, website, serves_beer, serves_breakfast, serves_brunch, serves_dinner, serves_lunch, serves_vegetarian_food, serves_wine, opening_hours FROM Places WHERE place_id = '{place_id}'"
+                print(query)
+                cursor = db_connection.cursor()
+                cursor.execute(query)
+                place = cursor.fetchall()[0]
+                open_now = None
+                if place[17] is not None:
+                    opening_hours = json.loads(place[17])
+                    if opening_hours is not None:
+                        if is_open_now(opening_hours):
+                            open_now = True
                         else:
-                            place_data = {
-                                "name": place['name'],
-                                "address": result.get('formatted_address'),
-                                "open_now": None,
-                                "weekday_text": None,
-                                "distance": distance,
-                                "rating": result['rating'] if 'rating' in result else None,
-                                "price_level": result["price_level"] if "price_level" in result else None,
-                                "place_id" : result["place_id"],
-                                "photo_url": photo_url,
-                                "website": result["website"] if "website" in result else None,
-                                "serves_beer": result["serves_beer"] if "serves_beer" in result else None,
-                                "serves_breakfast": result["serves_breakfast"] if "serves_breakfast" in result else None,
-                                "serves_brunch": result["serves_brunch"] if "serves_brunch" in result else None,
-                                "serves_dinner": result["serves_dinner"] if "serves_dinner" in result else None,
-                                "serves_lunch": result["serves_lunch"] if "serves_lunch" in result else None,
-                                "serves_vegetarian_food": result["serves_vegetarian_food"] if "serves_vegetarian_food" in result else None,
-                                "serves_wine": result["serves_wine"] if "serves_wine" in result else None
+                            open_now = False
+                        
+                print(place)
+                place_data = {
+                                "name": place[3],
+                                "address": place[4],
+                                "weekday_text": place[5],
+                                "distance": compute_distance(latitude, longitude, place[1], place[2]),
+                                "rating": place[6],
+                                "price_level": place[7],
+                                "place_id" : place_id,
+                                "url": place[8],
+                                "website": place[9],
+                                "serves_beer": place[10],
+                                "serves_breakfast": place[11],
+                                "serves_brunch": place[12],
+                                "serves_dinner": place[13],
+                                "serves_lunch": place[14],
+                                "serves_vegetarian_food": place[15],
+                                "serves_wine": place[16],
+                                "open_now": open_now
                             }
-
-                            places.append(place_data)
-            logger.info(f"Found {len(places)} places.")  
-            return places
-
-        else:
-            logger.warning(f"Nearby search response status: {nearby_data['status']}. No places found.")
-            return []
-
+                places.append(place_data)
+    return places
+            
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 bot = TeleBot(BOT_TOKEN)
@@ -255,7 +264,7 @@ def search(message, keywords=None, type=None):
             search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
 
             logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
-            places = get_places(latitude, longitude, search_radius, keywords, type=type)
+            places = get_places(float(latitude), float(longitude), search_radius, keywords, type=type)
 
             if not places:
                 bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
@@ -283,30 +292,7 @@ def search(message, keywords=None, type=None):
                             )
                 if place['weekday_text']:
                     response += "\n\nГрафік роботи:"
-                    for day_text in place['weekday_text']:
-                        if "Closed" in day_text:
-                            response += f"\n- {day_text}"
-                        elif "Open 24 hours" in day_text:
-                            response += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}" 
-                        else:
-                            day_text = day_text.replace("\u202f", " ")
-                            day_text = day_text.replace("\u2009", " ")
-                            parts = day_text.split('–')
-                            time1_str = parts[0].strip()
-                            time1_str = time1_str.split(":")
-                            time1_str = time1_str[1].replace(" ", "") + ":" + time1_str[2]
-                            time2_str = parts[1].strip()
-                            try:
-                                time1_obj = datetime.datetime.strptime(time1_str, '%I:%M %p')
-                                time1_24hour = time1_obj.strftime('%H:%M')
-                            except ValueError:
-                                time1_24hour = time1_str
-                            try:
-                                time2_obj = datetime.datetime.strptime(time2_str, '%I:%M %p')
-                                time2_24hour = time2_obj.strftime('%H:%M')
-                            except ValueError:
-                                time2_24hour = time2_str
-                            response += f"\n- " + f"{day_text.split(':')[0]}: {time1_24hour} - {time2_24hour}"
+                    response += place['weekday_text']
                 else:
                     response += "\nГрафік роботи невідомий :("
                 response = replace_weekdays(response).replace("Closed", "Зачинено")
@@ -317,14 +303,14 @@ def search(message, keywords=None, type=None):
                     if place["website"] is not None:
                         inline_keyboard.add(types.InlineKeyboardButton(text="Веб-сайт", url=place["website"]))
 
-                if place["photo_url"] is not None:
-                    image_url = place["photo_url"]
-                    filename = place["place_id"] + "_photo.jpg"
-                    logger.debug(f"Sending details for place: {place['name']}")
-                    bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=inline_keyboard)
-                else:
-                    logger.debug(f"Sending details for place: {place['name']}")
-                    bot.send_message(message.chat.id, response, reply_markup=inline_keyboard)
+                #if place["photo_url"] is not None:
+                    #image_url = place["photo_url"]
+                    #filename = place["place_id"] + "_photo.jpg"
+                    #logger.debug(f"Sending details for place: {place['name']}")
+                    #bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=inline_keyboard)
+                #else:
+                logger.debug(f"Sending details for place: {place['name']}")
+                bot.send_message(message.chat.id, response, reply_markup=inline_keyboard)
             bot.send_message(message.chat.id, "Оберіть дію:", reply_markup=start_keyboard)
             redis_client.delete(message.chat.id)
         except Exception as e:

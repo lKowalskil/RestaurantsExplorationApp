@@ -11,8 +11,9 @@ from googletrans import Translator
 from math import radians, sin, cos, sqrt, atan2
 import time
 import json
+import tempfile
 
-logging.basicConfig(#filename="logs.txt", 
+logging.basicConfig(filename="logs.txt", 
                     filemode="a", 
                     format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
                     level=logging.DEBUG)
@@ -124,8 +125,7 @@ def get_places(latitude, longitude, search_radius, keywords, type):
     places = []
     for place_id, place_lat, place_lon in places_in_bounding_box:
         if is_in_range(latitude, longitude, place_lat, place_lon, search_radius):
-                query = f"SELECT place_id, latitude, longitude, name, formatted_address, weekday_text, rating, price_level, url, website, serves_beer, serves_breakfast, serves_brunch, serves_dinner, serves_lunch, serves_vegetarian_food, serves_wine, opening_hours FROM Places WHERE place_id = '{place_id}'"
-                print(query)
+                query = f"SELECT place_id, latitude, longitude, name, formatted_address, weekday_text, rating, price_level, url, website, serves_beer, serves_breakfast, serves_brunch, serves_dinner, serves_lunch, serves_vegetarian_food, serves_wine, opening_hours, photos, types FROM Places WHERE place_id = '{place_id}'"
                 cursor = db_connection.cursor()
                 cursor.execute(query)
                 place = cursor.fetchall()[0]
@@ -137,8 +137,6 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                             open_now = True
                         else:
                             open_now = False
-                        
-                print(place)
                 place_data = {
                                 "name": place[3],
                                 "address": place[4],
@@ -156,9 +154,11 @@ def get_places(latitude, longitude, search_radius, keywords, type):
                                 "serves_lunch": place[14],
                                 "serves_vegetarian_food": place[15],
                                 "serves_wine": place[16],
-                                "open_now": open_now
+                                "open_now": open_now,
+                                "photos": json.loads(place[18])
                             }
-                places.append(place_data)
+                if type in place[19]:
+                    places.append(place_data)
     return places
             
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
@@ -171,7 +171,7 @@ start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboa
 for button in start_keyboard_list:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-location_keyboard_button_list = ["Змінити радіус пошуку"]#, "Фільтри"]
+location_keyboard_button_list = ["Змінити радіус пошуку"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_button_list:
     settings_keyboard.add(types.KeyboardButton(text=button))
@@ -236,7 +236,12 @@ def handle_settings(message):
         
 def handle_keywords_for_search(message):
     if message.text in search_option_keyboard_buttons_list:
-        search(message, type=message.text)
+        if message.text == "Кафе":
+            search(message, type="cafe")
+        elif message.text == "Ресторан":
+            search(message, type="restaurant")
+        elif message.text == "Бар":
+            search(message, type="bar")
 
 def search(message, keywords=None, type=None):
     logger.info(f"Search triggered, keywords:{keywords}, type:{type}")
@@ -248,12 +253,6 @@ def search(message, keywords=None, type=None):
     if location_string:
         bot.send_message(message.chat.id, "Зачекайте трошки, збираю інформацію", reply_markup=types.ReplyKeyboardRemove())
         try:
-            """ if not keywords:
-                try:
-                    keywords = str(redis_client.get(str(message.chat.id)+"_default_keywords"))
-                    translated_address = translator.translate(address, src='uk', dest='en').text
-                except Exception as e:
-                    logger.error(f"Error while retrieving default_keywords {e}")"""
             if not type:
                 logger.error("No type specified")
                 type="cafe"
@@ -302,13 +301,20 @@ def search(message, keywords=None, type=None):
                 if "website" in place:
                     if place["website"] is not None:
                         inline_keyboard.add(types.InlineKeyboardButton(text="Веб-сайт", url=place["website"]))
-
-                #if place["photo_url"] is not None:
-                    #image_url = place["photo_url"]
-                    #filename = place["place_id"] + "_photo.jpg"
-                    #logger.debug(f"Sending details for place: {place['name']}")
-                    #bot.send_photo(message.chat.id, caption=response, photo=image_url, reply_markup=inline_keyboard)
-                #else:
+                place_id = place["place_id"]
+                if place["photos"] is not None:
+                    query = f"SELECT photo_data FROM PlacePhotos WHERE place_id = '{place_id}'"
+                    cursor = db_connection.cursor()
+                    cursor.execute(query)
+                    blob_data_list = cursor.fetchall()
+                    media_group = []
+                    for blob_data in blob_data_list:
+                        with tempfile.NamedTemporaryFile(delete=False) as temp_file:
+                            temp_file.write(blob_data[0])
+                            media_group.append(types.InputMediaPhoto(open(temp_file.name, 'rb')))
+                    logger.debug(f"Sending details for place: {place['name']}")
+                    if len(media_group) > 0:
+                        bot.send_media_group(message.chat.id, media_group)
                 logger.debug(f"Sending details for place: {place['name']}")
                 bot.send_message(message.chat.id, response, reply_markup=inline_keyboard)
             bot.send_message(message.chat.id, "Оберіть дію:", reply_markup=start_keyboard)

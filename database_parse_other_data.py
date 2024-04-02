@@ -29,7 +29,7 @@ def download_photo(url, file_path):
     except Exception as e:
         print(f"Error: {e}")
 
-#API_KEY = os.environ.get("GOOGLE_API_KEY")
+API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 conn = mysql.connector.connect(
     host="localhost",
@@ -131,6 +131,7 @@ for place_id in place_ids:
         opening_hours = result["opening_hours"] if "opening_hours" in result else None
         reviews = result["reviews"] if "reviews" in result else None
         website = result["website"] if "website" in result else None
+        photos = result["photos"] if "photos" in result else None
         types = ''.join(result["types"]) if "types" in result else None
         weekday_text = None
         response_weekday_text = ''
@@ -169,14 +170,14 @@ for place_id in place_ids:
                     latitude=%s, longitude=%s, northeast_lat=%s, northeast_lng=%s, southwest_lat=%s, southwest_lng=%s,
                     icon_url=%s, name=%s, price_level=%s, rating=%s, reservable=%s, serves_beer=%s, serves_wine=%s,
                     takeout=%s, url=%s, wheelchair_accessible_entrance=%s, opening_hours=%s, weekday_text=%s,
-                    dine_in=%s, delivery=%s, business_status=%s, curbside_pickup=%s, reviews=%s, website=%s, types=%s
+                    dine_in=%s, delivery=%s, business_status=%s, curbside_pickup=%s, reviews=%s, website=%s, types=%s, photos=%s
                     WHERE place_id=%s"""
         values = (
             formatted_address, formatted_phone_number, international_phone_number,
             latitude, longitude, northeast_lat, northeast_lng, southwest_lat, southwest_lng,
             icon_url, name, price_level, rating, reservable, serves_beer, serves_wine,
             takeout, url, wheelchair_accessible_entrance, json.dumps(opening_hours), response_weekday_text,
-            dine_in, delivery, business_status, curbside_pickup, json.dumps(reviews), website, types,
+            dine_in, delivery, business_status, curbside_pickup, json.dumps(reviews), website, types, json.dumps(photos),
             place_id
         )
         cursor.execute(sql, values)

@@ -2,16 +2,16 @@ import json
 import os
 import mysql.connector
 
-photos_directory = "/home/user/RestaurantsExplorationApp/photos"
-jsons_directory = "/home/user/RestaurantsExplorationApp/details_jsons"
+photos_directory = "/home/koval/RestaurantsExplorationApp/photos"
+jsons_directory = "/home/koval/RestaurantsExplorationApp/details_jsons"
 jsons_paths = os.listdir(jsons_directory)
 jsons_paths = [os.path.join(jsons_directory, item) for item in jsons_paths]
 
 conn = mysql.connector.connect(
     host="localhost",
-    user="root",
+    user="phpmyadmin",
     password=os.environ.get("MYSQL_PASSWORD"),
-    database="PlacesExploraion"
+    database="PlacesExploration"
 )
 
 def image_to_bytes(image_path):

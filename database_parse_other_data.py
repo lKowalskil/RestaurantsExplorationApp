@@ -1,13 +1,8 @@
 import requests
 import os
-import math
-import folium
 import mysql.connector
-import time
 import logging
-from bs4 import BeautifulSoup
 import json
-import mimetypes
 import datetime
 import re
 
@@ -33,15 +28,23 @@ API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 conn = mysql.connector.connect(
     host="localhost",
-    user="root",
+    user="phpmyadmin",
     password=os.environ.get("MYSQL_PASSWORD"),
-    database="PlacesExploraion"
+    database="PlacesExploration"
 )
 
 if conn.is_connected():
     print("Connected to the MySQL database")
 
 cursor = conn.cursor()
+
+"""for json_file in os.listdir("/home/koval/RestaurantsExplorationApp/details_jsons"):
+    place_id = json_file.replace("details_data_", "").replace(".json", "")
+    print(place_id)
+    insert_query = "INSERT INTO Places (place_id) VALUES (%s)"
+    cursor.execute(insert_query, (place_id,))
+    conn.commit()
+"""
 try:
     cursor.execute("SELECT place_id FROM Places")
     place_ids = cursor.fetchall()
@@ -71,7 +74,7 @@ def replace_weekdays(text):
 
     logger.debug(f"Weekday replacement completed. Text after replacement: {text}")
     return text
-
+num_photos = 0
 for place_id in place_ids:
     """details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=address_components,adr_address,business_status,formatted_address,geometry,icon,icon_mask_base_uri,icon_background_color,name,photo,place_id,plus_code,type,url,utc_offset,vicinity,wheelchair_accessible_entrance,current_opening_hours,formatted_phone_number,international_phone_number,opening_hours,secondary_opening_hours,website,curbside_pickup,delivery,dine_in,editorial_summary,price_level,rating,reservable,reviews,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine,takeout,user_ratings_total&key={API_KEY}"
     details_response = requests.get(details_url)
@@ -97,12 +100,20 @@ for place_id in place_ids:
         result = details_data['result']
         """if "photos" in result:
             for i in range(len(result["photos"])):
-                photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth={result['photos'][0]['width']+ 1}&photo_reference={result['photos'][i]['photo_reference']}&key={API_KEY}"
-                os.makedirs(f"./photos/{place_id}_photos", exist_ok=True)
-                photo_path = f"./photos/{place_id}_photos/{i}_{place_id}.jpg"
-                if os.path.exists(photo_path):
+                if i > 0:
                     continue
-                download_photo(photo_url, photo_path)"""
+                photo_reference = result["photos"][i]["photo_reference"]
+                width = result['photos'][0]['width'] + 1
+                os.makedirs(f"./photos/{place_id}_photos", exist_ok=True)
+                photo_path = f"./photos/{place_id}_photos/{photo_reference}.jpg"
+                if os.path.exists(photo_path):
+                    #print("Exists")
+                    continue
+                else:
+                    #photo_url = f"https://maps.googleapis.com/maps/api/place/photo?maxwidth={width}&photo_reference={photo_reference}&key={API_KEY}"
+                    #download_photo(photo_url, photo_path)
+                    #time.sleep(0.09)
+                    #num_photos += 1"""
                 
         formatted_address = result["formatted_address"] if "formatted_address" in result else None
         formatted_phone_number = result["formatted_phone_number"] if "formatted_phone_number" in result else None
@@ -122,6 +133,9 @@ for place_id in place_ids:
         serves_wine = result["serves_wine"] if "serves_wine" in result else None
         serves_dinner = result["serves_dinner"] if "serves_dinner" in result else None
         serves_lunch = result["serves_lunch"] if "serves_lunch" in result else None
+        serves_breakfast = result["serves_breakfast"] if "serves_breakfast" in result else None
+        serves_brunch = result["serves_brunch"] if "serves_brunch" in result else None
+        serves_vegetarian_food = result["serves_vegetarian_food"] if "serves_vegetarian_food" in result else None
         takeout = result["takeout"] if "takeout" in result else None
         dine_in = result["dine_in"] if "dine_in" in result else None
         delivery = result["delivery"] if "delivery" in result else None
@@ -170,7 +184,8 @@ for place_id in place_ids:
                     latitude=%s, longitude=%s, northeast_lat=%s, northeast_lng=%s, southwest_lat=%s, southwest_lng=%s,
                     icon_url=%s, name=%s, price_level=%s, rating=%s, reservable=%s, serves_beer=%s, serves_wine=%s,
                     takeout=%s, url=%s, wheelchair_accessible_entrance=%s, opening_hours=%s, weekday_text=%s,
-                    dine_in=%s, delivery=%s, business_status=%s, curbside_pickup=%s, reviews=%s, website=%s, types=%s, photos=%s
+                    dine_in=%s, delivery=%s, business_status=%s, curbside_pickup=%s, reviews=%s, website=%s, types=%s, photos=%s,
+                    serves_breakfast=%s, serves_brunch=%s, serves_dinner=%s, serves_lunch=%s, serves_vegetarian_food=%s
                     WHERE place_id=%s"""
         values = (
             formatted_address, formatted_phone_number, international_phone_number,
@@ -178,6 +193,7 @@ for place_id in place_ids:
             icon_url, name, price_level, rating, reservable, serves_beer, serves_wine,
             takeout, url, wheelchair_accessible_entrance, json.dumps(opening_hours), response_weekday_text,
             dine_in, delivery, business_status, curbside_pickup, json.dumps(reviews), website, types, json.dumps(photos),
+            serves_breakfast, serves_brunch, serves_dinner, serves_lunch, serves_vegetarian_food,
             place_id
         )
         cursor.execute(sql, values)
@@ -189,3 +205,4 @@ for place_id in place_ids:
     else:
         logger.error(f"details_data['status'] is not OK")
         
+print(num_photos)

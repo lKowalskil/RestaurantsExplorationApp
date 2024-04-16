@@ -137,7 +137,6 @@ def get_place_reviews(place_id):
     cursor = db_connection.cursor()
     cursor.execute(query)
     reviews_str = cursor.fetchall()[0][0]
-    print(reviews_str)
     reviews = json.loads(reviews_str)
     return reviews
     
@@ -301,7 +300,6 @@ def handle_navigation(call):
     except ValueError:
         prefix, index = call.data.split("_")
     index = int(index)
-    print(index, prefix)
     try:
         if prefix == "place":
             chat_id = str(call.message.chat.id)

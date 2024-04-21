@@ -5,6 +5,7 @@ import logging
 import json
 import datetime
 import re
+from googletrans import Translator
 
 logging.basicConfig(#filename="logs.txt", 
                     filemode="a", 
@@ -37,6 +38,8 @@ if conn.is_connected():
     print("Connected to the MySQL database")
 
 cursor = conn.cursor()
+
+translator = Translator()
 
 """for json_file in os.listdir("/home/koval/RestaurantsExplorationApp/details_jsons"):
     place_id = json_file.replace("details_data_", "").replace(".json", "")
@@ -74,8 +77,11 @@ def replace_weekdays(text):
 
     logger.debug(f"Weekday replacement completed. Text after replacement: {text}")
     return text
+i = 0
 num_photos = 0
 for place_id in place_ids:
+    i += 1
+    print(i)
     """details_url = f"https://maps.googleapis.com/maps/api/place/details/json?place_id={place_id}&fields=address_components,adr_address,business_status,formatted_address,geometry,icon,icon_mask_base_uri,icon_background_color,name,photo,place_id,plus_code,type,url,utc_offset,vicinity,wheelchair_accessible_entrance,current_opening_hours,formatted_phone_number,international_phone_number,opening_hours,secondary_opening_hours,website,curbside_pickup,delivery,dine_in,editorial_summary,price_level,rating,reservable,reviews,serves_beer,serves_breakfast,serves_brunch,serves_dinner,serves_lunch,serves_vegetarian_food,serves_wine,takeout,user_ratings_total&key={API_KEY}"
     details_response = requests.get(details_url)
 
@@ -116,6 +122,8 @@ for place_id in place_ids:
                     #num_photos += 1"""
                 
         formatted_address = result["formatted_address"] if "formatted_address" in result else None
+        formatted_address = translator.translate(formatted_address, dest="uk", src="en").text
+        print(formatted_address)
         formatted_phone_number = result["formatted_phone_number"] if "formatted_phone_number" in result else None
         international_phone_number = result["international_phone_number"] if "international_phone_number" in result else None
         latitude = result["geometry"]["location"]["lat"] if "geometry" in result else None
@@ -144,6 +152,9 @@ for place_id in place_ids:
         curbside_pickup = result["curbside_pickup"] if "curbside_pickup" in result else None
         opening_hours = result["opening_hours"] if "opening_hours" in result else None
         reviews = result["reviews"] if "reviews" in result else None
+        if reviews is not None:
+            for review in reviews:
+                review["text"] = translator.translate(review["text"], dest="uk").text
         website = result["website"] if "website" in result else None
         photos = result["photos"] if "photos" in result else None
         types = ''.join(result["types"]) if "types" in result else None

@@ -19,7 +19,6 @@ logger = logging.getLogger(__name__)
 
 redis_client = redis.Redis()
 
-translator = Translator()
 
 db_connection = mysql.connector.connect(
     host="localhost",
@@ -149,7 +148,7 @@ start_keyboard_list = ["Пошук закладів", "Налаштування"
 start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in start_keyboard_list:
     start_keyboard.add(types.KeyboardButton(text=button))
-
+    
 location_keyboard_button_list = ["Змінити радіус пошуку"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_button_list:
@@ -184,9 +183,34 @@ for button in search_option_keyboard_buttons_list:
 def start(message):
     redis_client.delete(message.chat.id) 
     redis_client.set(str(message.chat.id) + "_range", 300)
+    bot.send_message(message.chat.id, "Будь-ласка, поділіться вашим номером телефону для авторизації:", reply_markup=types.ReplyKeyboardMarkup(
+                        one_time_keyboard=True, 
+                        resize_keyboard=True, 
+                        selective=True
+                    ).add(types.KeyboardButton(text="Поділитися номером телефону", request_contact=True)))
+
+@bot.message_handler(content_types=['contact'])
+def handle_contact(message):
+    phone_number = message.contact.phone_number
+    user_id = message.from_user.id
+    
+    cursor = db_connection.cursor()
+    cursor.execute("SELECT * FROM Users WHERE tg_user_id = %s", (user_id,))
+    existing_user = cursor.fetchone()
+    
+    db_connection.commit()
+    if existing_user:
+        pass
+    else:
+        sql = """INSERT INTO Users (tg_user_id, phone_number) VALUES (%s, %s)"""
+        values = (user_id, phone_number)
+        cursor.execute(sql, values)
+        db_connection.commit()
+    
+    bot.send_message(message.chat.id, "Авторизація успішна!")
     bot.send_message(message.chat.id, 
                         """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                        Оберіть дію: """,
+                        Оберіть дію:""",
                         reply_markup=start_keyboard)
 
 @bot.message_handler(content_types=['location'])
@@ -264,9 +288,8 @@ def get_detailed_place_info(place_id, latitude, longitude, type):
                 }
     
     address = str(place_data['address'])
-    translated_address = translator.translate(address, src='en', dest='uk').text
     response = ''
-    response += f"Назва: {place_data['name']}\nАдреса: {translated_address}\n"
+    response += f"Назва: {place_data['name']}\nАдреса: {address}\n"
     response += f"Номер телефону: {place_data['international_phone_number']}" + "\n" if place_data['international_phone_number'] is not None else ''
     response += f"Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
     response += f"Відстань: {int(place_data['distance'])} метрів\n"
@@ -331,7 +354,7 @@ def handle_navigation(call):
                 for dictionary in reviews:
                     redis_client.rpush(f'{chat_id}_reviews', json.dumps(dictionary))
                     
-                response_reviews = reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + translator.translate(reviews[0]["text"], dest="uk").text
+                response_reviews = reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + reviews[0]["text"]
                     
                 keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
                 keyboard_reviews.add( 
@@ -388,7 +411,7 @@ def handle_navigation(call):
             
             review_data = json.loads(review_data)
             
-            response_reviews = review_data["author_name"] + "\nОцінка:" + str(review_data["rating"]) + "\nВідгук: " + translator.translate(review_data["text"], dest="uk").text
+            response_reviews = review_data["author_name"] + "\nОцінка:" + str(review_data["rating"]) + "\nВідгук: " + review_data["text"]
             
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if index > 0 and index < len_reviews - 1:
@@ -466,7 +489,7 @@ def search(message, keywords=None, type=None, edit_mode=False):
                 reviews = get_place_reviews(first_place["place_id"])
                 redis_client.delete(f'{message.chat.id}_reviews')
                 
-                response_reviews = reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + translator.translate(reviews[0]["text"], dest="uk").text
+                response_reviews = reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + reviews[0]["text"]
                 
                 keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
                 keyboard_reviews.add( 

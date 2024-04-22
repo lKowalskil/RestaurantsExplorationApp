@@ -144,27 +144,27 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = TeleBot(BOT_TOKEN)
 logger.info("Bot is started")
 
-start_keyboard_list = ["Пошук закладів", "Налаштування"]
+start_keyboard_list_non_auth = ["Пошук закладів", "Налаштування"]
 start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-for button in start_keyboard_list:
+for button in start_keyboard_list_non_auth:
+    start_keyboard.add(types.KeyboardButton(text=button))
+
+start_keyboard_list_auth = ["Пошук закладів", "Налаштування", "Обрані заклади"]
+start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
+for button in start_keyboard_list_auth:
     start_keyboard.add(types.KeyboardButton(text=button))
     
-location_keyboard_button_list = ["Змінити радіус пошуку"]
+settings_keyboard_button_list = ["Змінити радіус пошуку"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-for button in location_keyboard_button_list:
+for button in settings_keyboard_button_list:
     settings_keyboard.add(types.KeyboardButton(text=button))
-    
-filters_keyboard_button_list = ['Подають пиво', 'Подають вино', 'Подають сніданок', 'Подають бранч', 'Подають обід', 'Подають вечерю', 'Подають вегетаріанську їжу']
-filters_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
-for button in filters_keyboard_button_list:
-    filters_keyboard.add(types.KeyboardButton(text=button))
 
 location_keyboard_buttons_list = ["Пошук закладів", "Налаштування"]
 location_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_buttons_list:
     location_keyboard.add(types.KeyboardButton(text=button))
 
-ranges_list = ["250", "500", "750", "1000", "1500", "2000", "2500", "3000", "3500", "4500", "5000"]
+ranges_list = ["250", "500", "1000", "1500", "2000", "3000", "4000", "5000", "Повернутися"]
 set_range_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 ranges_chunks = [ranges_list[i:i+2] for i in range(0, len(ranges_list), 2)]
 for chunk in ranges_chunks[:-1]:
@@ -172,6 +172,9 @@ for chunk in ranges_chunks[:-1]:
 if len(ranges_list) % 2 != 0:
     last_chunk = ranges_chunks[-1]
     set_range_keyboard.add(types.KeyboardButton(text=last_chunk[0]))
+else:
+    last_chunk = ranges_chunks[-1]
+    set_range_keyboard.add(types.KeyboardButton(text=chunk[0]), types.KeyboardButton(text=chunk[1]))
 
 search_option_keyboard_buttons_list = ["Кафе", "Ресторан", "Бар"]
 search_option_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
@@ -223,11 +226,35 @@ def save_location(message):
 def handle_settings(message):
     if message.text == "Налаштування":
         bot.send_message(message.chat.id, "Оберіть налаштування:", reply_markup=settings_keyboard)
+    elif message.text == "Актуальні бронювання":
+        response = ''
+        response += "Номер бронювання\n"
+        response += "Назва закладу\n"
+        response += "Адреса закладу\n"
+        response += "01.01.1970\n"
+        response += "00:00\n"
+        response += "5 місць\n"
+        response += "+3800000000000\n"
+        bot.send_message(message.chat.id, response, reply_markup=start_keyboard)
+    elif message.text == "Історія бронювання":
+        response = ''
+        response += "Номер бронювання\n"
+        response += "Назва закладу\n"
+        response += "Адреса закладу\n"
+        response += "01.01.1970\n"
+        response += "00:00\n"
+        response += "5 місць\n"
+        response += "+3800000000000\n"
+        bot.send_message(message.chat.id, response, reply_markup=start_keyboard)
+    elif message.text == "Обрані заклади":
+        bot.send_message(message.chat.id, "NNONONONO", reply_markup=start_keyboard)
     elif message.text == "Пошук закладів":
         bot.send_message(message.chat.id, "Оберіть тип закладу для пошуку:", reply_markup=search_option_keyboard)
         bot.register_next_step_handler(message, handle_keywords_for_search)
     elif message.text == "Змінити радіус пошуку":
         bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
+    elif message.text == "Повернутися":
+        bot.send_message(message.chat.id, "Оберіть дію:", reply_markup=start_keyboard)
     elif message.text in ranges_list:
         bot.send_message(message.chat.id, "Обрано", reply_markup=start_keyboard)
         try:
@@ -290,7 +317,7 @@ def get_detailed_place_info(place_id, latitude, longitude, type):
     address = str(place_data['address'])
     response = ''
     response += f"Назва: {place_data['name']}\nАдреса: {address}\n"
-    response += f"Номер телефону: {place_data['international_phone_number']}" + "\n" if place_data['international_phone_number'] is not None else ''
+    response += f"Номер телефону: {place_data['international_phone_number'].replace(' ', '')}" + "\n" if place_data['international_phone_number'] is not None else ''
     response += f"Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
     response += f"Відстань: {int(place_data['distance'])} метрів\n"
     response += f"Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}"
@@ -314,19 +341,24 @@ def get_detailed_place_info(place_id, latitude, longitude, type):
     response = replace_weekdays(response).replace("Closed", "Зачинено")
     map_link = generate_map_link(place_data["place_id"])
     website = place_data["website"]
-    return (response, map_link, website)
+    return (response, map_link, website, place[24])
 
 @bot.callback_query_handler(func=lambda call: True)
 def handle_navigation(call):
-    try:
-        prefix, index, latitude, longitude, type = call.data.split("_")
-    except ValueError:
-        prefix, index = call.data.split("_")
-    index = int(index)
+    data = call.data.split("_")
+    if data[0] == "place":
+        prefix, index, latitude, longitude, type = data
+    elif data[0] == "review":
+        prefix, index = data
+        index = int(index)
+    elif data[0] == "favourites":
+        prefix = data[0]
+        place_id = '_'.join(data[1:])
+
+    user_id = call.from_user.id
     try:
         if prefix == "place":
             chat_id = str(call.message.chat.id)
-
             message_id = redis_client.get(f"{chat_id}_places_message")
             if message_id is None:
                 bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
@@ -360,16 +392,14 @@ def handle_navigation(call):
                 keyboard_reviews.add( 
                     types.InlineKeyboardButton("Наступний", callback_data=f"review_{1}"), 
                 )
-                
-                    
-                
+
                 try:
                     bot.edit_message_text(chat_id=chat_id, message_id=message_id_reviews, text=response_reviews, reply_markup=keyboard_reviews)
                 except Exception as e: 
                     logger.error(f"Error editing message: {e}")
                     bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
                 
-            response, map_link, website = get_detailed_place_info(place_data["place_id"], latitude, longitude, type) 
+            response, map_link, website, international_phone_number = get_detailed_place_info(place_data["place_id"], latitude, longitude, type) 
 
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
@@ -391,7 +421,7 @@ def handle_navigation(call):
                 )
 
             try:
-                bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, reply_markup=inline_keyboard)
+                bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, reply_markup=inline_keyboard, parse_mode="html")
             except Exception as e: 
                 logger.error(f"Error editing message: {e}")
                 bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
@@ -433,6 +463,17 @@ def handle_navigation(call):
             except Exception as e: 
                 logger.error(f"Error editing message: {e}")
                 bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
+        elif prefix == "favourites":
+            print(place_id, ":", user_id)
+            query_insert = f"INSERT IGNORE INTO Favourites (place_id, tg_user_id) VALUES ('{place_id}', '{user_id}')"
+            try:
+                cursor = db_connection.cursor()
+                cursor.execute(query_insert)
+                db_connection.commit()
+                print("Successfully added to favourites.")
+            except Exception as e:
+                print(f"An error occurred while adding to favourites: {e}")
+                db_connection.rollback()
             
     except Exception as e:
         logger.error(f"Error editing message: {e}")
@@ -473,12 +514,15 @@ def search(message, keywords=None, type=None, edit_mode=False):
             first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
             if first_place:
                 first_place = json.loads(first_place)
-                response_places, map_link, website = get_detailed_place_info(first_place["place_id"], latitude, longitude, type)
+                response_places, map_link, website, international_phone_number = get_detailed_place_info(first_place["place_id"], latitude, longitude, type)
                 keyboard_places = types.InlineKeyboardMarkup(row_width=2)
                 if map_link:
                     keyboard_places.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
                 if website is not None:
                     keyboard_places.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                keyboard_places.add( 
+                    types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{first_place['place_id']}"), 
+                )
                 keyboard_places.add( 
                     types.InlineKeyboardButton("Наступний", callback_data=f"place_{1}_{latitude}_{longitude}_{type}"), 
                 )

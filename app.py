@@ -6,7 +6,6 @@ import logging
 from geopy.distance import geodesic
 import mysql.connector
 import re
-from googletrans import Translator
 from math import radians, sin, cos, sqrt, atan2
 import time
 import json
@@ -287,7 +286,7 @@ start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboa
 for button in start_keyboard_list_non_auth:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-start_keyboard_list_auth = ["Пошук закладів", "Налаштування", "Обрані заклади"]
+start_keyboard_list_auth = ["Пошук закладів", "Налаштування", "Редагувати відгуки", "Обрані заклади"]
 start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in start_keyboard_list_auth:
     start_keyboard.add(types.KeyboardButton(text=button))
@@ -408,6 +407,34 @@ def handle_settings(message):
     elif message.text == "Пошук закладів":
         bot.send_message(message.chat.id, "Оберіть тип закладу для пошуку:", reply_markup=search_option_keyboard)
         bot.register_next_step_handler(message, handle_keywords_for_search)
+    elif message.text == "Редагувати відгуки":
+        user_id = message.from_user.id
+        query = f"SELECT id, place_id, name, score, review, date FROM UsersReviews WHERE tg_user_id = {user_id}"
+        cursor = db_connection.cursor()
+        cursor.execute(query)
+        user_reviews = cursor.fetchall()
+        user_reviews_list = []
+        for review in user_reviews:
+            user_reviews_list.append({"id": review[0], "place_id": review[1], "name": review[2], "score": review[3], "review": review[4], "date": review[5].strftime('%Y-%m-%d %H:%M:%S')})
+        
+        redis_client.delete(f'{message.chat.id}_reviews_edit')
+        if len(user_reviews_list) != 0:
+            for dictionary in user_reviews_list:
+                redis_client.rpush(f'{message.chat.id}_reviews_edit', json.dumps(dictionary))
+                
+            inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
+            if len(user_reviews_list) > 1:
+                inline_keyboard.add( 
+                        types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{1}"), 
+                    )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Редагувати", callback_data=f"editreview_{review[0]}"),
+                )
+            response_first_review = get_review_response(user_reviews_list[0]["name"], user_reviews_list[0]["score"], user_reviews_list[0]["date"], user_reviews_list[0]["review"])
+            sent_message_reviews = bot.send_message(message.chat.id, response_first_review, reply_markup=inline_keyboard)
+            redis_client.set(f"{message.chat.id}_message_reviews_edit", sent_message_reviews.message_id)
+        else:
+            bot.send_message(message.chat.id, "Ви ще не залишали відгуків", start_keyboard_list_auth)
     elif message.text == "Змінити радіус пошуку":
         bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
     elif message.text == "Повернутися":
@@ -431,6 +458,17 @@ def handle_keywords_for_search(message):
         elif message.text == "Бар":
             search(message, type="bar")
 
+def get_review_response(name, score, date_or_str, review):
+    if isinstance(date_or_str, datetime.datetime):
+        date = date_or_str.strftime("%Y-%m-%d %H:%M:%S")
+    elif isinstance(date_or_str, str):
+        date = date_or_str
+    else:
+        logger.error("Invalid type in get_review_response")
+
+    response_review = f"Автор: {name}\nОцінка: {score}\nДата: {date}\nВідгук: {review}"
+    return response_review
+
 @bot.callback_query_handler(func=lambda call: True)
 def handle_navigation(call):
     data = call.data.split("_")
@@ -446,23 +484,57 @@ def handle_navigation(call):
     elif data[0] == "placefavourites":
         prefix, index = data
     elif data[0] == "sendreviews":
-        prefix, place_id = '_'.join(data[1:])
+        prefix = data[0]
+        place_id = '_'.join(data[1:])
+    elif data[0] == "addreview":
+        prefix = data[0]
+        place_id = '_'.join(data[1:])
+    elif data[0] == "reviewedit":
+        prefix, index = data
+        index = int(index)
+    elif data[0] == "editreview":
+        prefix, review_id = data
+
 
     user_id = call.from_user.id
     try:
-        if prefix == "place":
+        if prefix == "reviewedit":
+            chat_id = str(call.message.chat.id)
+            message_id = redis_client.get(f"{chat_id}_message_reviews_edit")
+            len_reviews = redis_client.llen(f'{chat_id}_reviews_edit')
+            review_data = json.loads(redis_client.lindex(f'{chat_id}_reviews_edit', index))
+            
+            inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
+            if index > 0 and index < len_reviews - 1:
+                inline_keyboard.add(
+                    types.InlineKeyboardButton("Попередній", callback_data=f"reviewedit_{index - 1}"),
+                    types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{index + 1}"),
+                )
+            elif index == 0 and index < len_reviews - 1:
+                inline_keyboard.add( 
+                    types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{index + 1}"),
+                )
+            elif index > 0 and index >= len_reviews - 1:
+                inline_keyboard.add( 
+                    types.InlineKeyboardButton("Попередній", callback_data=f"reviewedit_{index - 1}"),
+                )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Редагувати", callback_data=f"editreview_{review_data['id']}"),
+                )
+            response_reviews = get_review_response(review_data["name"], review_data["score"], review_data["date"], review_data["review"])
+            try:
+                bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response_reviews, reply_markup=inline_keyboard)
+            except Exception as e: 
+                logger.error(f"Error editing message: {e}")
+                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
+            
+        elif prefix == "place":
             chat_id = str(call.message.chat.id)
             message_id = redis_client.get(f"{chat_id}_places_message")
             if message_id is None:
                 bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
                 return
             message_id = message_id.decode() 
-            
-            message_id_reviews = redis_client.get(f"{chat_id}_reviews_message")
-            if message_id_reviews is None:
-                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
-                return
-            message_id_reviews = message_id_reviews.decode() 
             
             place_data = redis_client.lindex(f'{chat_id}_places', index)
             len_places = redis_client.llen(f'{chat_id}_places')
@@ -472,25 +544,16 @@ def handle_navigation(call):
                 return
 
             place_data = json.loads(place_data)
-
-            reviews = get_place_reviews(place_data["place_id"])
-            redis_client.delete(f'{chat_id}_reviews')
-            if reviews is not None:
-                for dictionary in reviews:
-                    redis_client.rpush(f'{chat_id}_reviews', json.dumps(dictionary))
-                    
-                response_reviews = reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + reviews[0]["text"]
-                    
-                keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
-                keyboard_reviews.add( 
-                    types.InlineKeyboardButton("Наступний", callback_data=f"review_{1}"), 
-                )
-
+                
+            if redis_client.exists(f"{chat_id}_reviews_message"):
+                message_id_reviews = redis_client.get(f"{chat_id}_reviews_message")
+                
                 try:
-                    bot.edit_message_text(chat_id=chat_id, message_id=message_id_reviews, text=response_reviews, reply_markup=keyboard_reviews)
-                except Exception as e: 
-                    logger.error(f"Error editing message: {e}")
-                    bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
+                    bot.delete_message(chat_id=chat_id, message_id=message_id_reviews)
+                except Exception as e:
+                    logger.exception(f"Error while deleting message: {e}")
+                
+                redis_client.delete(f"{chat_id}_reviews_message")
                 
             response, map_link, website = get_detailed_place_info(place_data["place_id"], latitude, longitude, user_id) 
 
@@ -500,32 +563,39 @@ def handle_navigation(call):
             if website is not None:
                 inline_keyboard.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
             inline_keyboard.add( 
-                    types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{place_data['place_id']}"), 
+                    types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{place_data['place_id']}"),
                 )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
+                )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
+                )
+            
             if index > 0 and index < len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"), 
-                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"), 
+                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
                 )
             elif index == 0 and index < len_places - 1:
                 inline_keyboard.add( 
-                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"), 
+                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
                 )
             elif index > 0 and index >= len_places - 1:
                 inline_keyboard.add( 
-                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"), 
+                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
                 )
 
             try:
                 bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, reply_markup=inline_keyboard, parse_mode="html")
             except Exception as e: 
                 logger.error(f"Error editing message: {e}")
-                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
+                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз")
         elif prefix == "review":
             chat_id = str(call.message.chat.id)
             message_id = redis_client.get(f"{chat_id}_reviews_message")
             if message_id is None:
-                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
+                bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз")
                 return
             message_id = message_id.decode() 
             review_data = redis_client.lindex(f'{chat_id}_reviews', index)
@@ -537,7 +607,7 @@ def handle_navigation(call):
             
             review_data = json.loads(review_data)
             
-            response_reviews = "Автор:" + review_data["author_name"] + "\nОцінка:" + str(review_data["rating"]) + "\nВідгук: " + review_data["text"]
+            response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["relative_time_description"], reviews[0]["text"])
             
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if index > 0 and index < len_reviews - 1:
@@ -597,6 +667,12 @@ def handle_navigation(call):
             inline_keyboard.add( 
                     types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{place_data['place_id']}"), 
                 )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
+                )
+            inline_keyboard.add( 
+                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
+                )
             if index > 0 and index < len_places - 1:
                 inline_keyboard.add(
                     types.InlineKeyboardButton("Попередній", callback_data=f"placefavourites_{index - 1}_{type}"), 
@@ -620,8 +696,8 @@ def handle_navigation(call):
             reviews = get_place_reviews(place_id)
             chat_id = str(call.message.chat.id)
             redis_client.delete(f'{chat_id}_reviews')
-            
-            response_reviews = "Автор:" + reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + reviews[0]["text"]
+
+            response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["relative_time_description"], reviews[0]["text"])
             
             keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
             keyboard_reviews.add( 
@@ -637,21 +713,103 @@ def handle_navigation(call):
             redis_client.delete(f"{chat_id}_reviews_message")
             sent_message_reviews = bot.send_message(chat_id, response_reviews, reply_markup=keyboard_reviews)
             redis_client.set(f"{chat_id}_reviews_message", sent_message_reviews.message_id)
-            
+        elif prefix == "addreview":
+            chat_id = str(call.message.chat.id)
+            bot.send_message(chat_id, "Введіть ваше ім'я:")
+            bot.register_next_step_handler(call.message, handle_name, place_id=place_id)
+        elif prefix == "editreview":
+            chat_id = str(call.message.chat.id)
+            bot.send_message(chat_id, "Введіть ваше ім'я:")
+            bot.register_next_step_handler(call.message, handle_name, review_id=review_id)
     except Exception as e:
         logger.error(f"Error editing message: {e}")
         bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
 
+def handle_name(message, place_id=None, review_id=None):
+    if message.text:
+        redis_client.set(f"review_{place_id}_name_{message.chat.id}", message.text)
+        bot.send_message(message.chat.id, "Введіть оцінку від 1 до 5:")
+        bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
+    else:
+        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть ім'я:")
+        bot.register_next_step_handler(message, handle_name, place_id=place_id, review_id=review_id)
+
+def handle_score(message, place_id=None, review_id=None):
+    if message.text:
+        try:
+            score = int(message.text)
+        except Exception as e:
+            logger.exception(f"Error while getting score for review: {e}")
+            bot.send_message(message.chat.id, "Треба ввести оцінку від 1 до 5:")
+            bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
+            return
+        if score < 1 or score > 5:
+            bot.send_message(message.chat.id, "Треба ввести оцінку від 1 до 5:")
+            bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
+            return
+        redis_client.set(f"review_{place_id}_score_{message.chat.id}", message.text)
+        bot.send_message(message.chat.id, "Введіть відгук:")
+        bot.register_next_step_handler(message, handle_review, place_id=place_id, review_id=review_id)
+    else:
+        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть оцінку:")
+        bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
+        
+def handle_review(message, place_id=None, review_id=None):
+    if message.text:
+        name = redis_client.get(f"review_{place_id}_name_{message.chat.id}")
+        name = name.decode('utf-8')
+        score = int(redis_client.get(f"review_{place_id}_score_{message.chat.id}"))
+        review = message.text
+        date = datetime.datetime.now()
+        if place_id:
+            query = f"INSERT INTO UsersReviews (place_id, name, tg_user_id, score, review, date) VALUES ('{place_id}', '{name}', {message.from_user.id}, {score}, '{review}', '{date.strftime('%Y-%m-%d %H:%M:%S')}')"
+            cursor = db_connection.cursor()
+            cursor.execute(query)
+            db_connection.commit()
+            bot.send_message(message.chat.id, "Ваш відгук успішно додано!")
+        elif review_id:
+            query = f"UPDATE UsersReviews SET name='{name}', tg_user_id={message.from_user.id}, score={score}, review='{review}', date='{date.strftime('%Y-%m-%d %H:%M:%S')}' WHERE id={review_id}"
+            cursor = db_connection.cursor()
+            cursor.execute(query)
+            db_connection.commit()
+            bot.send_message(message.chat.id, "Ваш відгук успішно відредаговано!")
+            
+
+    else:
+        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть відгук:")
+        bot.register_next_step_handler(message, handle_review)
+        
 def search(message, keywords=None, type=None):
     logger.info(f"Search triggered, keywords:{keywords}, type:{type}")
     user_id = message.from_user.id
     if message.location:
         location_string = f"{message.location.latitude},{message.location.longitude}"
         redis_client.set(message.chat.id, location_string)
+    
+    chat_id = message.chat.id
+    if redis_client.exists(f"{chat_id}_reviews_message"):
+        message_id_reviews = redis_client.get(f"{chat_id}_reviews_message")
         
-    location_string = redis_client.get(message.chat.id)
+        try:
+            bot.delete_message(chat_id=message.chat.id, message_id=message_id_reviews)
+        except Exception as e:
+            logger.exception(f"Error while deleting message: {e}")
+        
+        redis_client.delete(f"{chat_id}_reviews_message")
+    
+    if redis_client.exists(f"{chat_id}_places_message"):
+        message_id_places = redis_client.get(f"{chat_id}_places_message")
+        
+        try:
+            bot.delete_message(chat_id=message.chat.id, message_id=message_id_places)
+        except Exception as e:
+            logger.exception(f"Error while deleting message: {e}")
+        
+        redis_client.delete(f"{chat_id}_places_message")
+        
+    location_string = redis_client.get(chat_id)
     if location_string:
-        bot.send_message(message.chat.id, "Зачекайте трошки, збираю інформацію", reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(chat_id, "Зачекайте трошки, збираю інформацію", reply_markup=types.ReplyKeyboardRemove())
         try:
             if not type:
                 logger.error("No type specified")
@@ -660,7 +818,7 @@ def search(message, keywords=None, type=None):
             logger.info(f"Search keywords: {keywords}")
             
             latitude, longitude = location_string.decode().split(',') 
-            search_radius = int(redis_client.get(str(message.chat.id) + "_range"))
+            search_radius = int(redis_client.get(str(chat_id) + "_range"))
 
             logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
             places = get_places(float(latitude), float(longitude), search_radius, keywords, type=type)
@@ -674,7 +832,6 @@ def search(message, keywords=None, type=None):
             for dictionary in places:
                 redis_client.rpush(f'{message.chat.id}_places', json.dumps(dictionary))
             
-                
             first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
             if first_place:
                 first_place = json.loads(first_place)
@@ -688,31 +845,17 @@ def search(message, keywords=None, type=None):
                     types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{first_place['place_id']}"), 
                 )
                 keyboard_places.add( 
+                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
+                )
+                keyboard_places.add( 
+                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
+                )
+                keyboard_places.add( 
                     types.InlineKeyboardButton("Наступний", callback_data=f"place_{1}_{latitude}_{longitude}_{type}"), 
                 )
                 redis_client.delete(f"{message.chat.id}_places_message")
                 sent_message_places = bot.send_message(message.chat.id, response_places, reply_markup=keyboard_places)
                 redis_client.set(f"{message.chat.id}_places_message", sent_message_places.message_id)
-                
-                reviews = get_place_reviews(first_place["place_id"])
-                redis_client.delete(f'{message.chat.id}_reviews')
-                
-                response_reviews = "Автор:" + reviews[0]["author_name"] + "\nОцінка:" + str(reviews[0]["rating"]) + "\nВідгук: " + reviews[0]["text"]
-                
-                keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
-                keyboard_reviews.add( 
-                    types.InlineKeyboardButton("Наступний", callback_data=f"review_{1}"), 
-                )
-                
-                if len(reviews) != 0:
-                    for dictionary in reviews:
-                        redis_client.rpush(f'{message.chat.id}_reviews', json.dumps(dictionary))
-                else:
-                    keyboard_reviews = None
-                    
-                redis_client.delete(f"{message.chat.id}_reviews_message")
-                sent_message_reviews = bot.send_message(message.chat.id, response_reviews, reply_markup=keyboard_reviews)
-                redis_client.set(f"{message.chat.id}_reviews_message", sent_message_reviews.message_id)
             
         except Exception as e:
             bot.send_message(message.chat.id, "Виникла помилка, почніть заново", reply_markup=start_keyboard)

@@ -129,13 +129,43 @@ def get_places(latitude, longitude, search_radius, keywords, type):
             if type in place[1]:
                 places.append({"place_id": place_id, "name": name})
     return places
-            
+
+def convert_relative_time(description):
+    # Split the description to get the numeric value and the unit
+    value, unit, _ = description.split()
+
+    # Define a mapping of units to timedelta objects
+    time_units = {
+        'weeks': datetime.timedelta(weeks=int(value)),
+        'week': datetime.timedelta(weeks=int(value)),
+        'months': datetime.timedelta(days=30 * int(value)),  # Approximate
+        'month': datetime.timedelta(days=30 * int(value)),  # Approximate
+        'years': datetime.timedelta(days=365 * int(value)),  # Approximate
+        'year': datetime.timedelta(days=365 * int(value))   # Approximate
+    }
+
+    # Return the current datetime minus the calculated delta
+    return datetime.datetime.now() - time_units[unit]
+
 def get_place_reviews(place_id):
+    query = f"SELECT id, name, score, review, date FROM UsersReviews WHERE place_id = '{place_id}'"
+    reviews = []
+    cursor = db_connection.cursor()
+    cursor.execute(query)
+    user_reviews = cursor.fetchall()
+    for elem in user_reviews:
+        reviews.append({"author_name": elem[1], "rating": elem[2], "date": elem[4].strftime('%d.%m.%Y'), "text": elem[3]})
+    reviews = sorted(reviews, key=lambda x: datetime.datetime.strptime(x['date'], '%d.%m.%Y'), reverse=True)
     query = f"SELECT reviews FROM Places WHERE place_id = '{place_id}'"      
     cursor = db_connection.cursor()
     cursor.execute(query)
     reviews_str = cursor.fetchall()[0][0]
-    reviews = json.loads(reviews_str)
+    reviews_google = json.loads(reviews_str)
+    for review in reviews_google:
+        review["relative_time"] = convert_relative_time(review["relative_time_description"])
+    reviews_google = sorted(reviews_google, key=lambda x: x['relative_time'], reverse=True)
+    for review in reviews_google:
+        reviews.append(review)
     return reviews
     
 def get_detailed_place_info(place_id, latitude, longitude, user_id):
@@ -387,7 +417,6 @@ def handle_settings(message):
         first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
         if first_place:
             first_place = json.loads(first_place)
-            print(first_place)
             response_places, map_link, website = get_detailed_place_info_without_distance(first_place["place_id"], user_id)
             keyboard_places = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
@@ -607,8 +636,10 @@ def handle_navigation(call):
             
             review_data = json.loads(review_data)
             
-            response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["relative_time_description"], reviews[0]["text"])
-            
+            if "relative_time_description" in review_data:
+                response_reviews = get_review_response(review_data["author_name"], str(review_data["rating"]), review_data["relative_time_description"], review_data["text"])
+            elif "date" in review_data:
+                response_reviews = get_review_response(review_data["author_name"], str(review_data["rating"]), review_data["date"], review_data["text"])
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if index > 0 and index < len_reviews - 1:
                 inline_keyboard.add(
@@ -630,15 +661,14 @@ def handle_navigation(call):
                 logger.error(f"Error editing message: {e}")
                 bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз") 
         elif prefix == "favourites":
-            print(place_id, ":", user_id)
             query_insert = f"INSERT IGNORE INTO Favourites (place_id, tg_user_id) VALUES ('{place_id}', '{user_id}')"
             try:
                 cursor = db_connection.cursor()
                 cursor.execute(query_insert)
                 db_connection.commit()
-                print("Successfully added to favourites.")
+                logger.info("Successfully added to favourites.")
             except Exception as e:
-                print(f"An error occurred while adding to favourites: {e}")
+                logger.error(f"An error occurred while adding to favourites: {e}")
                 db_connection.rollback()
         elif prefix == "placefavourites":
             chat_id = str(call.message.chat.id)
@@ -697,7 +727,10 @@ def handle_navigation(call):
             chat_id = str(call.message.chat.id)
             redis_client.delete(f'{chat_id}_reviews')
 
-            response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["relative_time_description"], reviews[0]["text"])
+            if "date" in reviews[0]:
+                response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["date"], reviews[0]["text"])
+            elif "relative_time_description":
+                response_reviews = get_review_response(reviews[0]["author_name"], str(reviews[0]["rating"]), reviews[0]["relative_time_description"], reviews[0]["text"])
             
             keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
             keyboard_reviews.add( 
@@ -706,6 +739,10 @@ def handle_navigation(call):
             
             if len(reviews) != 0:
                 for dictionary in reviews:
+                    if "date" in dictionary:
+                        dictionary["date"] = dictionary["date"]
+                    if "relative_time" in dictionary:
+                        dictionary["relative_time"] = datetime.datetime.strftime(dictionary['relative_time'], '%d.%m.%Y')
                     redis_client.rpush(f'{chat_id}_reviews', json.dumps(dictionary))
             else:
                 keyboard_reviews = None

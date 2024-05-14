@@ -10,7 +10,7 @@ conn = mysql.connector.connect(
     host="localhost",
     user="root",
     password=os.environ.get("MySQL_PASSWORD"),
-    database="PlacesExploraion"
+    database="PlacesExploration"
 )
 if conn.is_connected():
     print("Connected to the MySQL database")
@@ -56,7 +56,7 @@ my_map = folium.Map(location=[center_lat, center_lon], zoom_start=12)
 for circle in circle_coordinates:
     folium.Circle(
         location=[circle['latitude'], circle['longitude']],
-        radius=circle_radius_km*1000, 
+        radius=circle_radius_km*1000,
         color='blue',
         fill=True,
         fill_color='blue',

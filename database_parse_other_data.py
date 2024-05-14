@@ -7,9 +7,9 @@ import datetime
 import re
 from googletrans import Translator
 
-logging.basicConfig(#filename="logs.txt", 
-                    filemode="a", 
-                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', 
+logging.basicConfig(filename="logs.txt",
+                    filemode="a",
+                    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s',
                     level=logging.INFO)
 logger = logging.getLogger(__name__)
 
@@ -25,12 +25,12 @@ def download_photo(url, file_path):
     except Exception as e:
         print(f"Error: {e}")
 
-API_KEY = os.environ.get("GOOGLE_API_KEY")
+#API_KEY = os.environ.get("GOOGLE_API_KEY")
 
 conn = mysql.connector.connect(
     host="localhost",
-    user="phpmyadmin",
-    password=os.environ.get("MYSQL_PASSWORD"),
+    user="RestApp",
+    password="2T6vdziQvn*",
     database="PlacesExploration"
 )
 
@@ -41,13 +41,13 @@ cursor = conn.cursor()
 
 translator = Translator()
 
-"""for json_file in os.listdir("/home/koval/RestaurantsExplorationApp/details_jsons"):
+for json_file in os.listdir("/root/RestaurantsExplorationApp/details_jsons"):
     place_id = json_file.replace("details_data_", "").replace(".json", "")
     print(place_id)
     insert_query = "INSERT INTO Places (place_id) VALUES (%s)"
     cursor.execute(insert_query, (place_id,))
     conn.commit()
-"""
+
 try:
     cursor.execute("SELECT place_id FROM Places")
     place_ids = cursor.fetchall()
@@ -96,11 +96,11 @@ for place_id in place_ids:
         logger.info(f"Details data saved to {file_path}")
     else:
         logger.info("Error: Unable to fetch details data")"""
-        
+
     filepath = f"./details_jsons/details_data_{place_id}.json"
     with open(filepath, "r") as json_file:
         details_data = json.load(json_file)
-        
+
     if details_data['status'] == 'OK':
         logger.info("Place details fetched successfully.")
         result = details_data['result']
@@ -120,7 +120,7 @@ for place_id in place_ids:
                     #download_photo(photo_url, photo_path)
                     #time.sleep(0.09)
                     #num_photos += 1"""
-                
+
         formatted_address = result["formatted_address"] if "formatted_address" in result else None
         formatted_address = translator.translate(formatted_address, dest="uk", src="en").text
         print(formatted_address)
@@ -166,7 +166,7 @@ for place_id in place_ids:
                 if "Closed" in day_text:
                     response_weekday_text += f"\n- {day_text}"
                 elif "Open 24 hours" in day_text:
-                    response_weekday_text += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}" 
+                    response_weekday_text += f"\n- {day_text.replace('Open 24 hours', 'Відчинено 24 години')}"
                 else:
                     day_text = day_text.replace("\u202f", " ")
                     day_text = day_text.replace("\u2009", " ")
@@ -215,5 +215,5 @@ for place_id in place_ids:
             logger.info("Update failed.")
     else:
         logger.error(f"details_data['status'] is not OK")
-        
+
 print(num_photos)

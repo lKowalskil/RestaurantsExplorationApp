@@ -472,6 +472,7 @@ def handle_contact(message):
             if connection.is_connected():
                 sql = """INSERT INTO Users (tg_user_id, phone_number) VALUES (%s, %s)"""
                 values = (user_id, phone_number)
+                cursor = connection.cursor()
                 cursor.execute(sql, values)
                 connection.commit()
                 cursor.close()

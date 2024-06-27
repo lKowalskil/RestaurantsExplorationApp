@@ -34,6 +34,21 @@ def generate_map_link(place_id):
     logger.debug(f"Generated map link: {map_url}")
     return map_url
 
+def number_to_emoji(number):
+    digit_to_emoji = {
+        '0': '0️⃣',
+        '1': '1️⃣',
+        '2': '2️⃣',
+        '3': '3️⃣',
+        '4': '4️⃣',
+        '5': '5️⃣',
+        '6': '6️⃣',
+        '7': '7️⃣',
+        '8': '8️⃣',
+        '9': '9️⃣'
+    }
+    return ''.join(digit_to_emoji[digit] for digit in str(number))
+
 def haversine(lat1, lon1, lat2, lon2):
 
     lat1, lon1, lat2, lon2 = map(radians, [lat1, lon1, lat2, lon2])
@@ -649,7 +664,24 @@ def handle_navigation(call):
         prefix = data[0]
         user_id = data[1]
         place_id = '_'.join(data[2:])
-
+    elif data[0] == "nextpage":
+        prefix = data[0]
+        index = data[1]
+        user_id = data[2]
+        latitude = data[3]
+        longitude = data[4]
+    elif data[0] == "prevpage":
+        prefix = data[0]
+        index = data[1]
+        user_id = data[2]
+        latitude = data[3]
+        longitude = data[4]
+    elif data[0] == "sendplace":
+        prefix = data[0]
+        latitude = data[1]
+        longitude = data[2]
+        place_id = '_'.join(data[3:])
+    
     user_id = call.from_user.id
     try:
         if prefix == "reviewedit":
@@ -801,8 +833,6 @@ def handle_navigation(call):
                 logger.error(f"An error occurred while adding to favourites: {e}")
             finally:
                 connection.close()
-
-
         elif prefix == "placefavourites":
             user_id = call.message.from_user.id
             chat_id = str(call.message.chat.id)
@@ -850,7 +880,6 @@ def handle_navigation(call):
                 inline_keyboard.add(
                     types.InlineKeyboardButton("Попередній", callback_data=f"placefavourites_{index - 1}"),
                 )
-
             try:
                 bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, reply_markup=inline_keyboard, parse_mode="html")
             except Exception as e:
@@ -911,6 +940,72 @@ def handle_navigation(call):
             finally:
                 connection.close()
             bot.answer_callback_query(call.id, "Заклад успішно прибрано з обраних")
+        elif prefix == "nextpage":
+            page_size = 5
+            places_length = redis_client.llen(f"{call.message.chat.id}_places")
+            index = int(index)
+            start_index =  index * page_size
+            end_index = start_index + page_size
+            if end_index >= places_length:
+                end_index = places_length - 1
+            places = redis_client.lrange(f"{call.message.chat.id}_places", start_index, end_index - 1)
+            places = [json.loads(place) for place in places]
+            print("len:", len(places))
+            names = [elem["name"] for elem in places]
+            response = ""
+            for i in range(start_index, end_index):
+                response += f"{i+1}. {names[i - start_index]}\n"
+            keyboard_places = types.InlineKeyboardMarkup()
+            if end_index < places_length - 1 and start_index > 0:
+                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            elif start_index > 0 and end_index >= places_length - 1:
+                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            elif start_index <= 0 and end_index < places_length - 1:
+                keyboard_places.row(types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            number_buttons = []
+            for i in range(len(places)):
+                number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+start_index+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{places[i]['place_id']}"))
+            keyboard_places.row(*number_buttons)
+            message_id = redis_client.get(f"sentmessageplaces_{call.message.chat.id}")
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=message_id, text=response, reply_markup=keyboard_places)
+        elif prefix == "prevpage":
+            page_size = 5
+            places_length = redis_client.llen(f"{call.message.chat.id}_places")
+            index = int(index)
+            start_index =  index * page_size
+            end_index = start_index + page_size
+            if end_index >= places_length:
+                end_index = places_length - 1
+            places = redis_client.lrange(f"{call.message.chat.id}_places", start_index, end_index - 1)
+            places = [json.loads(place) for place in places]
+            names = [elem["name"] for elem in places]
+            response = ""
+            for i in range(start_index, end_index):
+                response += f"{i+1}. {names[i - start_index]}\n"
+            keyboard_places = types.InlineKeyboardMarkup()
+            if end_index < places_length - 1 and start_index > 0:
+                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            elif start_index > 0 and end_index >= places_length - 1:
+                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            elif start_index <= 0 and end_index < places_length - 1:
+                keyboard_places.row(types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+            number_buttons = []
+            for i in range(len(places)):
+                number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+start_index+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{places[i]['place_id']}"))
+            keyboard_places.row(*number_buttons)
+            message_id = redis_client.get(f"sentmessageplaces_{call.message.chat.id}")
+            bot.edit_message_text(chat_id=call.message.chat.id, message_id=message_id, text=response, reply_markup=keyboard_places)
+        elif prefix == "sendplace":
+            sent_message_id = redis_client.get(f"place_message_id_{call.message.chat.id}")
+            try:
+                bot.delete_message(chat_id=call.message.chat.id, message_id=sent_message_id)
+            except:
+                pass
+            response = get_detailed_place_info(place_id, latitude, longitude, call.message.chat.id)
+            place_message_id = bot.send_message(call.message.chat.id, response).message_id
+            redis_client.set(f"place_message_id_{call.message.chat.id}", place_message_id)
+            
+            
     except Exception as e:
         logger.error(f"Error editing message: {e}")
         bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз")
@@ -1058,7 +1153,22 @@ def search(message, keywords=None, type=None):
             for dictionary in places:
                 redis_client.rpush(f'{message.chat.id}_places', json.dumps(dictionary))
 
-            first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
+            first_five = places[:5]
+            names = [elem["name"] for elem in first_five]
+            response = ""
+            for i in range(len(names)):
+                response += f"{i+1}.{names[i]}\n"
+            keyboard_places = types.InlineKeyboardMarkup()
+            if len(places) > 5:
+                keyboard_places.row(types.InlineKeyboardButton("Наступний", callback_data=f"nextpage_{1}_{message.chat.id}_{latitude}_{longitude}"))
+            number_buttons = []
+            for i in range(len(first_five)):
+                number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{first_five[i]['place_id']}"))
+            keyboard_places.row(*number_buttons)
+            sent_message_places = bot.send_message(message.chat.id, response, reply_markup=keyboard_places)
+            redis_client.set(f"sentmessageplaces_{message.chat.id}", sent_message_places.message_id)
+            
+            """first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
             if first_place:
                 first_place = json.loads(first_place)
                 response_places, map_link, website = get_detailed_place_info(first_place["place_id"], latitude, longitude, user_id)
@@ -1081,7 +1191,7 @@ def search(message, keywords=None, type=None):
                 )
                 redis_client.delete(f"{message.chat.id}_places_message")
                 sent_message_places = bot.send_message(message.chat.id, response_places, reply_markup=keyboard_places)
-                redis_client.set(f"{message.chat.id}_places_message", sent_message_places.message_id)
+                redis_client.set(f"{message.chat.id}_places_message", sent_message_places.message_id)"""
 
         except Exception as e:
             bot.send_message(message.chat.id, "Виникла помилка, почніть заново", reply_markup=start_keyboard)

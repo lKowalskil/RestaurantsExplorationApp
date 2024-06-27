@@ -34,6 +34,11 @@ def generate_map_link(place_id):
     logger.debug(f"Generated map link: {map_url}")
     return map_url
 
+def extract_address(full_address):
+    parts = full_address.split(',')
+    address = parts[0] + ',' + parts[1]
+    return address.strip()
+
 def number_to_emoji(number):
     digit_to_emoji = {
         '0': '0️⃣',
@@ -147,7 +152,7 @@ def get_places(latitude, longitude, search_radius, keywords, type):
     try:
         for place_id, place_lat, place_lon in places_in_bounding_box:
             if is_in_range(latitude, longitude, place_lat, place_lon, search_radius):
-                query = f"SELECT name, types FROM Places WHERE place_id = '{place_id}'"
+                query = f"SELECT name, types, formatted_address FROM Places WHERE place_id = '{place_id}'"
 
                 if connection.is_connected():
                     cursor = connection.cursor()
@@ -159,7 +164,7 @@ def get_places(latitude, longitude, search_radius, keywords, type):
 
                 name = place[0]
                 if type in place[1]:
-                    places.append({"place_id": place_id, "name": name, "distance": compute_distance(latitude, longitude, place_lat, place_lon)})
+                    places.append({"place_id": place_id, "name": name, "distance": compute_distance(latitude, longitude, place_lat, place_lon), "formatted_address": place[2]})
     finally:
         connection.close()
 
@@ -295,17 +300,19 @@ def get_detailed_place_info(place_id, latitude, longitude, user_id):
     logger.info(f"{place_data}")
 
     address = str(place_data['address'])
-    response = f"Назва: {place_data['name']}" + ("⭐️\n" if place_id in favourite_places else "\n")
-    response += f"Адреса: {address}\n"
-    response += f"Номер телефону: {place_data['international_phone_number'].replace(' ', '')}" + "\n" if place_data['international_phone_number'] is not None else ''
-    response += f"Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
-    response += f"Відстань: {int(place_data['distance'])} метрів\n"
-    response += f"Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}"
-    response += f"\nРівень Ціни: {place_data['price_level']}" if place_data['price_level'] is not None else ''
-    response += '\nЄ місця всередині' if place_data.get('dine_in', False) else ''
-    response += '\nЄ доставка' if place_data.get('delivery', False) else ''
-    response += '\nМожливе бронювання' if place_data.get('reservable', False) else ''
-    response += "\n\nГрафік роботи:"
+    response = ''
+    response += f"☕️ {place_data['name']}" + ("⭐️\n\n" if place_id in favourite_places else "\n\n")
+    response += f"📍 Адреса: {address}\n"
+    response += f"📞 Номер телефону: {place_data['international_phone_number'].replace(' ', '')}\n" if place_data['international_phone_number'] is not None else ''
+    response += f"🕒 Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
+    response += f"📏 Відстань: {int(place_data['distance'])} метрів\n"
+    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}\n"
+    response += f"💰 Рівень Ціни: {place_data['price_level']}\n" if place_data['price_level'] is not None else ''
+    response += '🪑 Є місця всередині\n' if place_data.get('dine_in', False) else ''
+    response += '🚚 Є доставка\n' if place_data.get('delivery', False) else ''
+    response += '📅 Можливе бронювання\n' if place_data.get('reservable', False) else ''
+
+    response += "\n🕓 Графік роботи:\n"
     if place_data["weekday_text"]:
         if "Графік роботи невідомий :(" in place_data["weekday_text"]:
             response += " невідомо :("
@@ -372,16 +379,18 @@ def get_detailed_place_info_without_distance(place_id, user_id):
 
     address = str(place_data['address'])
     response = ''
-    response += f"Назва: {place_data['name']}" + ("⭐️\n" if place_id in favourite_places else "\n")
-    response += f"Адреса: {address}\n"
-    response += f"Номер телефону: {place_data['international_phone_number'].replace(' ', '')}" + "\n" if place_data['international_phone_number'] is not None else ''
-    response += f"Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
-    response += f"Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}"
-    response += f"\nРівень Ціни: {place_data['price_level']}" if place_data['price_level'] is not None else ''
-    response += '\nЄ місця всередині' if place_data.get('dine_in', False) else ''
-    response += '\nЄ доставка' if place_data.get('delivery', False) else ''
-    response += '\nМожливе бронювання' if place_data.get('reservable', False) else ''
-    response += "\n\nГрафік роботи:"
+    response += f"☕️ {place_data['name']}" + ("⭐️\n\n" if place_id in favourite_places else "\n\n")
+    response += f"📍 Адреса: {address}\n"
+    response += f"📞 Номер телефону: {place_data['international_phone_number'].replace(' ', '')}\n" if place_data['international_phone_number'] is not None else ''
+    response += f"🕒 Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
+    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}\n"
+    response += f"💰 Рівень Ціни: {place_data['price_level']}\n" if place_data['price_level'] is not None else ''
+    response += '🪑 Є місця всередині\n' if place_data.get('dine_in', False) else ''
+    response += '🚚 Є доставка\n' if place_data.get('delivery', False) else ''
+    response += '📅 Можливе бронювання\n' if place_data.get('reservable', False) else ''
+
+    response += "\n🕓 Графік роботи:\n"
+    
     if place_data["weekday_text"]:
         if "Графік роботи невідомий :(" in place_data["weekday_text"]:
             response += " невідомо :("
@@ -950,11 +959,14 @@ def handle_navigation(call):
                 end_index = places_length - 1
             places = redis_client.lrange(f"{call.message.chat.id}_places", start_index, end_index - 1)
             places = [json.loads(place) for place in places]
-            print("len:", len(places))
             names = [elem["name"] for elem in places]
-            response = ""
+            response = "☕️ Топ заклади поруч з вами\n"
             for i in range(start_index, end_index):
                 response += f"{i+1}. {names[i - start_index]}\n"
+                distance = int(places[i - start_index]["distance"])
+                formatted_address = extract_address(places[i - start_index]["formatted_address"])
+                response += f"🧭 {distance}м\n"
+                response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if end_index < places_length - 1 and start_index > 0:
                 keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
@@ -979,9 +991,13 @@ def handle_navigation(call):
             places = redis_client.lrange(f"{call.message.chat.id}_places", start_index, end_index - 1)
             places = [json.loads(place) for place in places]
             names = [elem["name"] for elem in places]
-            response = ""
+            response = "☕️ Топ заклади поруч з вами\n"
             for i in range(start_index, end_index):
                 response += f"{i+1}. {names[i - start_index]}\n"
+                distance = int(places[i - start_index]["distance"])
+                formatted_address = extract_address(places[i - start_index]["formatted_address"])
+                response += f"🧭 {distance}м\n"
+                response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if end_index < places_length - 1 and start_index > 0:
                 keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
@@ -997,13 +1013,31 @@ def handle_navigation(call):
             bot.edit_message_text(chat_id=call.message.chat.id, message_id=message_id, text=response, reply_markup=keyboard_places)
         elif prefix == "sendplace":
             sent_message_id = redis_client.get(f"place_message_id_{call.message.chat.id}")
+            chat_id = call.message.chat.id
             try:
-                bot.delete_message(chat_id=call.message.chat.id, message_id=sent_message_id)
+                bot.delete_message(chat_id=chat_id, message_id=sent_message_id)
             except:
                 pass
-            response = get_detailed_place_info(place_id, latitude, longitude, call.message.chat.id)
-            place_message_id = bot.send_message(call.message.chat.id, response).message_id
-            redis_client.set(f"place_message_id_{call.message.chat.id}", place_message_id)
+            
+            response, map_link, website = get_detailed_place_info(place_id, latitude, longitude, chat_id)
+
+            inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
+            if map_link:
+                inline_keyboard.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+            if website is not None:
+                inline_keyboard.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+            inline_keyboard.add(
+                    types.InlineKeyboardButton("Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_id}"),
+                )
+            inline_keyboard.add(
+                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_id}"),
+                )
+            inline_keyboard.add(
+                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_id}"),
+                )
+            
+            place_message_id = bot.send_message(chat_id, response, reply_markup=inline_keyboard).message_id
+            redis_client.set(f"place_message_id_{chat_id}", place_message_id)
             
             
     except Exception as e:
@@ -1155,9 +1189,13 @@ def search(message, keywords=None, type=None):
 
             first_five = places[:5]
             names = [elem["name"] for elem in first_five]
-            response = ""
+            response = "☕️ Топ заклади поруч з вами\n"
             for i in range(len(names)):
                 response += f"{i+1}.{names[i]}\n"
+                distance = int(places[i]["distance"])
+                formatted_address = extract_address(places[i]["formatted_address"])
+                response += f"🧭 {distance}м\n"
+                response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if len(places) > 5:
                 keyboard_places.row(types.InlineKeyboardButton("Наступний", callback_data=f"nextpage_{1}_{message.chat.id}_{latitude}_{longitude}"))
@@ -1165,7 +1203,7 @@ def search(message, keywords=None, type=None):
             for i in range(len(first_five)):
                 number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{first_five[i]['place_id']}"))
             keyboard_places.row(*number_buttons)
-            sent_message_places = bot.send_message(message.chat.id, response, reply_markup=keyboard_places)
+            sent_message_places = bot.send_message(message.chat.id, response, reply_markup=keyboard_places, parse_mode="")
             redis_client.set(f"sentmessageplaces_{message.chat.id}", sent_message_places.message_id)
             
             """first_place = redis_client.lindex(f'{message.chat.id}_places', 0)

@@ -306,7 +306,7 @@ def get_detailed_place_info(place_id, latitude, longitude, user_id):
     response += f"📞 Номер телефону: {place_data['international_phone_number'].replace(' ', '')}\n" if place_data['international_phone_number'] is not None else ''
     response += f"🕒 Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
     response += f"📏 Відстань: {int(place_data['distance'])} метрів\n"
-    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}\n"
+    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо 😕'}\n"
     response += f"💰 Рівень Ціни: {place_data['price_level']}\n" if place_data['price_level'] is not None else ''
     response += '🪑 Є місця всередині\n' if place_data.get('dine_in', False) else ''
     response += '🚚 Є доставка\n' if place_data.get('delivery', False) else ''
@@ -314,11 +314,11 @@ def get_detailed_place_info(place_id, latitude, longitude, user_id):
 
     response += "\n🕓 Графік роботи:\n"
     if place_data["weekday_text"]:
-        if "Графік роботи невідомий :(" in place_data["weekday_text"]:
-            response += " невідомо :("
+        if "⏳ Графік роботи невідомий 😕" in place_data["weekday_text"]:
+            response += " невідомо 😕"
         else:
             response += place_data['weekday_text']
-    response = replace_weekdays(response).replace("Closed", "Зачинено")
+    response = replace_weekdays(response).replace("Closed", "Зачинено 🔒")
     map_link = generate_map_link(place_data["place_id"])
     website = place_data["website"]
     return (response, map_link, website)
@@ -383,7 +383,7 @@ def get_detailed_place_info_without_distance(place_id, user_id):
     response += f"📍 Адреса: {address}\n"
     response += f"📞 Номер телефону: {place_data['international_phone_number'].replace(' ', '')}\n" if place_data['international_phone_number'] is not None else ''
     response += f"🕒 Статус роботи: {'Відкрито' if place_data['open_now'] else 'Закрито'}\n"
-    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо'}\n"
+    response += f"⭐ Рейтинг: {place_data['rating'] if place_data['rating'] is not None else 'Невідомо 😕'}\n"
     response += f"💰 Рівень Ціни: {place_data['price_level']}\n" if place_data['price_level'] is not None else ''
     response += '🪑 Є місця всередині\n' if place_data.get('dine_in', False) else ''
     response += '🚚 Є доставка\n' if place_data.get('delivery', False) else ''
@@ -392,11 +392,11 @@ def get_detailed_place_info_without_distance(place_id, user_id):
     response += "\n🕓 Графік роботи:\n"
     
     if place_data["weekday_text"]:
-        if "Графік роботи невідомий :(" in place_data["weekday_text"]:
-            response += " невідомо :("
+        if "⏳ Графік роботи невідомий 😕" in place_data["weekday_text"]:
+            response += " невідомо 😕"
         else:
             response += place_data['weekday_text']
-    response = replace_weekdays(response).replace("Closed", "Зачинено")
+    response = replace_weekdays(response).replace("Closed", "Зачинено 🔒")
     map_link = generate_map_link(place_data["place_id"])
     website = place_data["website"]
     return (response, map_link, website)
@@ -406,27 +406,27 @@ BOT_TOKEN = os.environ.get("BOT_TOKEN")
 bot = TeleBot(BOT_TOKEN)
 logger.info("Bot is started")
 
-start_keyboard_list_non_auth = ["Пошук закладів", "Налаштування"]
+start_keyboard_list_non_auth = ["🔍Пошук закладів", "⚙️Налаштування"]
 start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in start_keyboard_list_non_auth:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-start_keyboard_list_auth = ["Пошук закладів", "Налаштування", "Редагувати відгуки", "Обрані заклади"]
+start_keyboard_list_auth = ["🔍Пошук закладів", "⚙️Налаштування", "✏️Редагувати відгуки", "🌟Обрані заклади"]
 start_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in start_keyboard_list_auth:
     start_keyboard.add(types.KeyboardButton(text=button))
 
-settings_keyboard_button_list = ["Змінити радіус пошуку"]
+settings_keyboard_button_list = ["📏Змінити радіус пошуку"]
 settings_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in settings_keyboard_button_list:
     settings_keyboard.add(types.KeyboardButton(text=button))
 
-location_keyboard_buttons_list = ["Пошук закладів", "Налаштування"]
+location_keyboard_buttons_list = ["🔍Пошук закладів", "⚙️Налаштування"]
 location_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in location_keyboard_buttons_list:
     location_keyboard.add(types.KeyboardButton(text=button))
 
-ranges_list = ["250", "500", "1000", "1500", "2000", "3000", "4000", "5000", "Повернутися"]
+ranges_list = ["250", "500", "1000", "1500", "2000", "3000", "4000", "5000", "🔙Повернутися"]
 set_range_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 ranges_chunks = [ranges_list[i:i+2] for i in range(0, len(ranges_list), 2)]
 for chunk in ranges_chunks[:-1]:
@@ -438,7 +438,7 @@ else:
     last_chunk = ranges_chunks[-1]
     set_range_keyboard.add(types.KeyboardButton(text=chunk[0]), types.KeyboardButton(text=chunk[1]))
 
-search_option_keyboard_buttons_list = ["Кафе", "Ресторан", "Бар"]
+search_option_keyboard_buttons_list = ["☕Кафе", "🍽️Ресторан", "🍹Бар"]
 search_option_keyboard = types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True)
 for button in search_option_keyboard_buttons_list:
     search_option_keyboard.add(types.KeyboardButton(text=button))
@@ -462,15 +462,15 @@ def start(message):
 
     if result:
         bot.send_message(message.chat.id,
-                    """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                    Оберіть дію:""",
+                    """👋 Вітаю! Цей бот допоможе вам знайти ☕ кафе та 🍽️ ресторани поблизу. \n
+                      🔽Оберіть дію:""",
                     reply_markup=start_keyboard)
     else:
-        bot.send_message(message.chat.id, "Будь-ласка, поділіться вашим номером телефону для авторизації:", reply_markup=types.ReplyKeyboardMarkup(
+        bot.send_message(message.chat.id, "📞Будь-ласка, поділіться вашим номером телефону для авторизації:", reply_markup=types.ReplyKeyboardMarkup(
                             one_time_keyboard=True,
                             resize_keyboard=True,
                             selective=True
-                        ).add(types.KeyboardButton(text="Поділитися номером телефону", request_contact=True)))
+                        ).add(types.KeyboardButton(text="📞Поділитися номером телефону", request_contact=True)))
 
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
@@ -503,23 +503,23 @@ def handle_contact(message):
         finally:
             connection.close()
 
-    bot.send_message(message.chat.id, "Авторизація успішна!")
+    bot.send_message(message.chat.id, "✅Авторизація успішна!")
     bot.send_message(message.chat.id,
-                        """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                        Оберіть дію:""",
+                        """👋 Вітаю! Цей бот допоможе вам знайти ☕ кафе та 🍽️ ресторани поблизу. \n
+                        🔽Оберіть дію:""",
                         reply_markup=start_keyboard)
 
 @bot.message_handler(content_types=['location'])
 def save_location(message):
     location_string = f"{message.location.latitude},{message.location.longitude}"
     redis_client.set(message.chat.id, location_string)
-    bot.send_message(message.chat.id, "Запам'ятав", reply_markup=location_keyboard)
+    bot.send_message(message.chat.id, "📝Запам'ятав", reply_markup=location_keyboard)
 
 @bot.message_handler(content_types=['text'])
 def handle_settings(message):
-    if message.text == "Налаштування":
+    if message.text == "⚙️Налаштування":
         bot.send_message(message.chat.id, "Оберіть налаштування:", reply_markup=settings_keyboard)
-    elif message.text == "Обрані заклади":
+    elif message.text == "🌟Обрані заклади":
         user_id = message.from_user.id
         connection = pool.get_connection()
         try:
@@ -537,7 +537,7 @@ def handle_settings(message):
             places.append({"place_id": place[0]})
 
         if not places:
-            bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
+            bot.send_message(message.chat.id, "🔍За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
             logger.debug("No places found for the search query.")
             return
 
@@ -552,29 +552,29 @@ def handle_settings(message):
             response_places, map_link, website = get_detailed_place_info_without_distance(first_place["place_id"], user_id)
             keyboard_places = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
-                keyboard_places.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                keyboard_places.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
             if website is not None:
-                keyboard_places.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                keyboard_places.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
             keyboard_places.add(
-                    types.InlineKeyboardButton("Прибрати з обраних", callback_data=f"removefromfavourites_{user_id}_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("❌Прибрати з обраних", callback_data=f"removefromfavourites_{user_id}_{first_place['place_id']}"),
             )
             keyboard_places.add(
-                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
                 )
             keyboard_places.add(
-                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
                 )
             keyboard_places.add(
-                types.InlineKeyboardButton("Наступний", callback_data=f"placefavourites_{1}"),
+                types.InlineKeyboardButton("➡️", callback_data=f"placefavourites_{1}"),
             )
             redis_client.delete(f"{message.chat.id}_places_message")
             sent_message_places = bot.send_message(message.chat.id, response_places, reply_markup=keyboard_places)
             redis_client.set(f"{message.chat.id}_places_message", sent_message_places.message_id)
 
-    elif message.text == "Пошук закладів":
+    elif message.text == "🔍Пошук закладів":
         bot.send_message(message.chat.id, "Оберіть тип закладу для пошуку:", reply_markup=search_option_keyboard)
         bot.register_next_step_handler(message, handle_keywords_for_search)
-    elif message.text == "Редагувати відгуки":
+    elif message.text == "✏️Редагувати відгуки":
         user_id = message.from_user.id
         connection = pool.get_connection()
         try:
@@ -599,37 +599,37 @@ def handle_settings(message):
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if len(user_reviews_list) > 1:
                 inline_keyboard.add(
-                        types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{1}"),
+                        types.InlineKeyboardButton("➡️", callback_data=f"reviewedit_{1}"),
                     )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Редагувати", callback_data=f"editreview_{review[0]}"),
+                    types.InlineKeyboardButton("✏️Редагувати", callback_data=f"editreview_{review[0]}"),
                 )
             response_first_review = get_review_response(user_reviews_list[0]["name"], user_reviews_list[0]["score"], user_reviews_list[0]["date"], user_reviews_list[0]["review"])
             sent_message_reviews = bot.send_message(message.chat.id, response_first_review, reply_markup=inline_keyboard)
             redis_client.set(f"{message.chat.id}_message_reviews_edit", sent_message_reviews.message_id)
         else:
             bot.send_message(message.chat.id, "Ви ще не залишали відгуків", start_keyboard_list_auth)
-    elif message.text == "Змінити радіус пошуку":
-        bot.send_message(message.chat.id, "Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
-    elif message.text == "Повернутися":
-        bot.send_message(message.chat.id, "Оберіть дію:", reply_markup=start_keyboard)
+    elif message.text == "📏Змінити радіус пошуку":
+        bot.send_message(message.chat.id, "📏Оберіть бажаний радіус пошуку", reply_markup=set_range_keyboard)
+    elif message.text == "🔙Повернутися":
+        bot.send_message(message.chat.id, "🔽Оберіть дію:", reply_markup=start_keyboard)
     elif message.text in ranges_list:
-        bot.send_message(message.chat.id, "Обрано", reply_markup=start_keyboard)
+        bot.send_message(message.chat.id, "✅Обрано", reply_markup=start_keyboard)
         try:
             redis_client.set(str(message.chat.id) + "_range", int(message.text))
         except ValueError:
-            bot.send_message(message.chat.id, "Виникла помилка, спробуйте ще раз", reply_markup=start_keyboard)
+            bot.send_message(message.chat.id, "❗️Виникла помилка, спробуйте ще раз", reply_markup=start_keyboard)
 
     else:
-        bot.send_message(message.chat.id, "Такої команди не існує, почніть заново", reply_markup=start_keyboard)
+        bot.send_message(message.chat.id, "🚫Такої команди не існує, почніть заново", reply_markup=start_keyboard)
 
 def handle_keywords_for_search(message):
     if message.text in search_option_keyboard_buttons_list:
-        if message.text == "Кафе":
+        if message.text == "☕Кафе":
             search(message, type="cafe")
-        elif message.text == "Ресторан":
+        elif message.text == "🍽️Ресторан":
             search(message, type="restaurant")
-        elif message.text == "Бар":
+        elif message.text == "🍹Бар":
             search(message, type="bar")
 
 def get_review_response(name, score, date_or_str, review):
@@ -640,7 +640,7 @@ def get_review_response(name, score, date_or_str, review):
     else:
         logger.error("Invalid type in get_review_response")
 
-    response_review = f"Автор: {name}\nОцінка: {score}\nДата: {date}\nВідгук: {review}"
+    response_review = f"👤Автор: {name}\n⭐Оцінка: {score}\n📅Дата: {date}\n📝Відгук: {review}"
     return response_review
 
 @bot.callback_query_handler(func=lambda call: True)
@@ -702,19 +702,19 @@ def handle_navigation(call):
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if index > 0 and index < len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"reviewedit_{index - 1}"),
-                    types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{index + 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"reviewedit_{index - 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"reviewedit_{index + 1}"),
                 )
             elif index == 0 and index < len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Наступний", callback_data=f"reviewedit_{index + 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"reviewedit_{index + 1}"),
                 )
             elif index > 0 and index >= len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"reviewedit_{index - 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"reviewedit_{index - 1}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Редагувати", callback_data=f"editreview_{review_data['id']}"),
+                    types.InlineKeyboardButton("✏️Редагувати", callback_data=f"editreview_{review_data['id']}"),
                 )
             response_reviews = get_review_response(review_data["name"], review_data["score"], review_data["date"], review_data["review"])
             try:
@@ -735,7 +735,7 @@ def handle_navigation(call):
             len_places = redis_client.llen(f'{chat_id}_places')
 
             if place_data is None:
-                bot.answer_callback_query(call.id, "No more results.")
+                bot.answer_callback_query(call.id, "Більше результатів немає")
                 return
 
             place_data = json.loads(place_data)
@@ -754,31 +754,31 @@ def handle_navigation(call):
 
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
             if website is not None:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("⭐Додати до обраних", callback_data=f"favourites_{place_data['place_id']}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
                 )
 
             if index > 0 and index < len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
-                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
                 )
             elif index == 0 and index < len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"place_{index + 1}_{latitude}_{longitude}_{type}"),
                 )
             elif index > 0 and index >= len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"place_{index - 1}_{latitude}_{longitude}_{type}"),
                 )
 
             try:
@@ -809,16 +809,16 @@ def handle_navigation(call):
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if index > 0 and index < len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"review_{index - 1}"),
-                    types.InlineKeyboardButton("Наступний", callback_data=f"review_{index + 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"review_{index - 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"review_{index + 1}"),
                 )
             elif index == 0 and index < len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Наступний", callback_data=f"review_{index + 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"review_{index + 1}"),
                 )
             elif index > 0 and index >= len_reviews - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"review_{index - 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"review_{index - 1}"),
                 )
 
             try:
@@ -864,30 +864,30 @@ def handle_navigation(call):
 
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
             if website is not None:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("❌Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_data['place_id']}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{place_data['place_id']}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
+                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_data['place_id']}"),
                 )
             if index > 0 and index < len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"placefavourites_{index - 1}"),
-                    types.InlineKeyboardButton("Наступний", callback_data=f"placefavourites_{index + 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"placefavourites_{index - 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"placefavourites_{index + 1}"),
                 )
             elif index == 0 and index < len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Наступний", callback_data=f"placefavourites_{index + 1}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"placefavourites_{index + 1}"),
                 )
             elif index > 0 and index >= len_places - 1:
                 inline_keyboard.add(
-                    types.InlineKeyboardButton("Попередній", callback_data=f"placefavourites_{index - 1}"),
+                    types.InlineKeyboardButton("⬅️", callback_data=f"placefavourites_{index - 1}"),
                 )
             try:
                 bot.edit_message_text(chat_id=chat_id, message_id=message_id, text=response, reply_markup=inline_keyboard, parse_mode="html")
@@ -910,7 +910,7 @@ def handle_navigation(call):
 
             keyboard_reviews = types.InlineKeyboardMarkup(row_width=2)
             keyboard_reviews.add(
-                types.InlineKeyboardButton("Наступний", callback_data=f"review_{1}"),
+                types.InlineKeyboardButton("➡️", callback_data=f"review_{1}"),
             )
 
             if len(reviews) != 0:
@@ -928,11 +928,11 @@ def handle_navigation(call):
             redis_client.set(f"{chat_id}_reviews_message", sent_message_reviews.message_id)
         elif prefix == "addreview":
             chat_id = str(call.message.chat.id)
-            bot.send_message(chat_id, "Введіть ваше ім'я:")
+            bot.send_message(chat_id, "👤Введіть ваше ім'я:")
             bot.register_next_step_handler(call.message, handle_name, place_id=place_id)
         elif prefix == "editreview":
             chat_id = str(call.message.chat.id)
-            bot.send_message(chat_id, "Введіть ваше ім'я:")
+            bot.send_message(chat_id, "👤Введіть ваше ім'я:")
             bot.register_next_step_handler(call.message, handle_name, review_id=review_id)
         elif prefix == "removefromfavourites":
             query = f"DELETE FROM Favourites WHERE place_id='{place_id}' AND tg_user_id={user_id}"
@@ -969,11 +969,11 @@ def handle_navigation(call):
                 response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if end_index < places_length - 1 and start_index > 0:
-                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("⬅️", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("➡️", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
             elif start_index > 0 and end_index >= places_length - 1:
-                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("⬅️", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
             elif start_index <= 0 and end_index < places_length - 1:
-                keyboard_places.row(types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("➡️", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
             number_buttons = []
             for i in range(len(places)):
                 number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+start_index+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{places[i]['place_id']}"))
@@ -1000,11 +1000,11 @@ def handle_navigation(call):
                 response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if end_index < places_length - 1 and start_index > 0:
-                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("⬅️", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"), types.InlineKeyboardButton("➡️", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
             elif start_index > 0 and end_index >= places_length - 1:
-                keyboard_places.row(types.InlineKeyboardButton("Попередня сторінка", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("⬅️", callback_data=f"prevpage_{index-1}_{call.message.chat.id}_{latitude}_{longitude}"))
             elif start_index <= 0 and end_index < places_length - 1:
-                keyboard_places.row(types.InlineKeyboardButton("Наступна сторінка", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("➡️", callback_data=f"nextpage_{index+1}_{call.message.chat.id}_{latitude}_{longitude}"))
             number_buttons = []
             for i in range(len(places)):
                 number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+start_index+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{places[i]['place_id']}"))
@@ -1023,17 +1023,17 @@ def handle_navigation(call):
 
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
             if website is not None:
-                inline_keyboard.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                inline_keyboard.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_id}"),
+                    types.InlineKeyboardButton("❌Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_id}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{place_id}"),
+                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{place_id}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{place_id}"),
+                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_id}"),
                 )
             
             place_message_id = bot.send_message(chat_id, response, reply_markup=inline_keyboard).message_id
@@ -1048,22 +1048,22 @@ def handle_name(message, place_id=None, review_id=None):
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                    Оберіть дію:""",
+                    🔽Оберіть дію:""",
                     reply_markup=start_keyboard)
         return
     if message.text:
         redis_client.set(f"review_{place_id}_name_{message.chat.id}", message.text)
-        bot.send_message(message.chat.id, "Введіть оцінку від 1 до 5:")
+        bot.send_message(message.chat.id, "⭐Введіть оцінку від 1 до 5:")
         bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
     else:
-        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть ім'я:")
+        bot.send_message(message.chat.id, "⚠️Ви надіслали порожнє повідомлення, введіть ім'я:")
         bot.register_next_step_handler(message, handle_name, place_id=place_id, review_id=review_id)
 
 def handle_score(message, place_id=None, review_id=None):
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                    Оберіть дію:""",
+                    🔽Оберіть дію:""",
                     reply_markup=start_keyboard)
         return
     if message.text:
@@ -1071,25 +1071,25 @@ def handle_score(message, place_id=None, review_id=None):
             score = int(message.text)
         except Exception as e:
             logger.exception(f"Error while getting score for review: {e}")
-            bot.send_message(message.chat.id, "Треба ввести оцінку від 1 до 5:")
+            bot.send_message(message.chat.id, "⚠️Треба ввести оцінку від 1 до 5:")
             bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
             return
         if score < 1 or score > 5:
-            bot.send_message(message.chat.id, "Треба ввести оцінку від 1 до 5:")
+            bot.send_message(message.chat.id, "⚠️Треба ввести оцінку від 1 до 5:")
             bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
             return
         redis_client.set(f"review_{place_id}_score_{message.chat.id}", message.text)
-        bot.send_message(message.chat.id, "Введіть відгук:")
+        bot.send_message(message.chat.id, "📝Введіть відгук:")
         bot.register_next_step_handler(message, handle_review, place_id=place_id, review_id=review_id)
     else:
-        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть оцінку:")
+        bot.send_message(message.chat.id, "⚠️Ви надіслали порожнє повідомлення, введіть оцінку:")
         bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
 
 def handle_review(message, place_id=None, review_id=None):
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
-                    Оберіть дію:""",
+                    🔽Оберіть дію:""",
                     reply_markup=start_keyboard)
         return
     if message.text:
@@ -1107,7 +1107,7 @@ def handle_review(message, place_id=None, review_id=None):
                     cursor.execute(query)
                     connection.commit()
                     cursor.close()
-                    bot.send_message(message.chat.id, "Ваш відгук успішно додано!")
+                    bot.send_message(message.chat.id, "✅Ваш відгук успішно додано!")
             finally:
                 connection.close()
         elif review_id:
@@ -1118,13 +1118,13 @@ def handle_review(message, place_id=None, review_id=None):
                     cursor.execute(query)
                     connection.commit()
                     cursor.close()
-                    bot.send_message(message.chat.id, "Ваш відгук успішно відредаговано!")
+                    bot.send_message(message.chat.id, "✅Ваш відгук успішно відредаговано!")
             finally:
                 connection.close()
 
 
     else:
-        bot.send_message(message.chat.id, "Ви надіслали порожнє повідомлення, введіть відгук:")
+        bot.send_message(message.chat.id, "⚠️Ви надіслали порожнє повідомлення, введіть відгук:")
         bot.register_next_step_handler(message, handle_review)
 
 def search(message, keywords=None, type=None):
@@ -1164,7 +1164,7 @@ def search(message, keywords=None, type=None):
         else:
             search_radius = int(search_radius)
 
-        bot.send_message(chat_id, f"Зачекайте трошки, збираю інформацію, ваш радіус пошуку - {search_radius}м", reply_markup=types.ReplyKeyboardRemove())
+        bot.send_message(chat_id, f"⏳Зачекайте трошки, збираю інформацію, ваш радіус пошуку - {search_radius}м", reply_markup=types.ReplyKeyboardRemove())
         try:
             if not type:
                 logger.error("No type specified")
@@ -1179,7 +1179,7 @@ def search(message, keywords=None, type=None):
             places = get_places(float(latitude), float(longitude), search_radius, keywords, type=type)
 
             if not places:
-                bot.send_message(message.chat.id, "За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
+                bot.send_message(message.chat.id, "🙄За вашим запитом нічого не знайдено.", reply_markup=start_keyboard)
                 logger.debug("No places found for the search query.")
                 return
 
@@ -1198,7 +1198,7 @@ def search(message, keywords=None, type=None):
                 response += f"📍 {formatted_address}\n"
             keyboard_places = types.InlineKeyboardMarkup()
             if len(places) > 5:
-                keyboard_places.row(types.InlineKeyboardButton("Наступний", callback_data=f"nextpage_{1}_{message.chat.id}_{latitude}_{longitude}"))
+                keyboard_places.row(types.InlineKeyboardButton("➡️", callback_data=f"nextpage_{1}_{message.chat.id}_{latitude}_{longitude}"))
             number_buttons = []
             for i in range(len(first_five)):
                 number_buttons.append(types.InlineKeyboardButton(f"{number_to_emoji(i+1)}", callback_data=f"sendplace_{latitude}_{longitude}_{first_five[i]['place_id']}"))
@@ -1212,20 +1212,20 @@ def search(message, keywords=None, type=None):
                 response_places, map_link, website = get_detailed_place_info(first_place["place_id"], latitude, longitude, user_id)
                 keyboard_places = types.InlineKeyboardMarkup(row_width=2)
                 if map_link:
-                    keyboard_places.add(types.InlineKeyboardButton(text="Відобразити на мапі", url=map_link))
+                    keyboard_places.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
                 if website is not None:
-                    keyboard_places.add(types.InlineKeyboardButton(text="Вебсайт", url=website))
+                    keyboard_places.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
                 keyboard_places.add(
-                    types.InlineKeyboardButton("Додати до обраних", callback_data=f"favourites_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("⭐Додати до обраних", callback_data=f"favourites_{first_place['place_id']}"),
                 )
                 keyboard_places.add(
-                    types.InlineKeyboardButton("Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
                 )
                 keyboard_places.add(
-                    types.InlineKeyboardButton("Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
+                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
                 )
                 keyboard_places.add(
-                    types.InlineKeyboardButton("Наступний", callback_data=f"place_{1}_{latitude}_{longitude}_{type}"),
+                    types.InlineKeyboardButton("➡️", callback_data=f"place_{1}_{latitude}_{longitude}_{type}"),
                 )
                 redis_client.delete(f"{message.chat.id}_places_message")
                 sent_message_places = bot.send_message(message.chat.id, response_places, reply_markup=keyboard_places)
@@ -1237,7 +1237,7 @@ def search(message, keywords=None, type=None):
 
     else:
         logger.warning(f"Location not found for chat ID: {message.chat.id}")
-        bot.send_message(message.chat.id, "Будь ласка, поділіться вашим місцезнаходженням для здійснення пошуку",
+        bot.send_message(message.chat.id, "🌍Будь ласка, поділіться вашим місцезнаходженням для здійснення пошуку",
         reply_markup=types.ReplyKeyboardMarkup(one_time_keyboard=True, resize_keyboard=True, selective=True).add(types.KeyboardButton(text="Надіслати розташування", request_location=True)))
         bot.register_next_step_handler(message, search, keywords, type)
 

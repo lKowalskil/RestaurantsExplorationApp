@@ -10,6 +10,7 @@ import re
 from math import radians, sin, cos, sqrt, atan2
 import time
 import json
+import base64
 
 logging.basicConfig(filename="logs.txt",
                     filemode="a",
@@ -241,6 +242,24 @@ def get_place_reviews(place_id):
         reviews.append(review)
     return reviews
 
+def get_photos_for_place(place_id):
+    logger.debug(f"Fetching photos for place ID: {place_id}")
+    connection = pool.get_connection()
+    cursor = connection.cursor()
+    try:
+        query = "SELECT photo_data FROM PlacePhotos WHERE place_id = %s"
+        cursor.execute(query, (place_id,))
+        photos = cursor.fetchall()
+        photo_list = [photo[0] for photo in photos]
+        logger.debug(f"Fetched {len(photo_list)} photos for place ID: {place_id}")
+        return photo_list
+    except mysql.connector.Error as err:
+        logger.error(f"Error fetching photos for place ID {place_id}: {err}")
+        return []
+    finally:
+        cursor.close()
+        connection.close()
+
 def get_detailed_place_info(place_id, latitude, longitude, user_id):
 
     connection = pool.get_connection()
@@ -321,7 +340,7 @@ def get_detailed_place_info(place_id, latitude, longitude, user_id):
     response = replace_weekdays(response).replace("Closed", "Зачинено 🔒")
     map_link = generate_map_link(place_data["place_id"])
     website = place_data["website"]
-    return (response, map_link, website)
+    return (response, map_link, website, get_photos_for_place(place_id))
 
 def get_detailed_place_info_without_distance(place_id, user_id):
     connection = pool.get_connection()
@@ -399,7 +418,7 @@ def get_detailed_place_info_without_distance(place_id, user_id):
     response = replace_weekdays(response).replace("Closed", "Зачинено 🔒")
     map_link = generate_map_link(place_data["place_id"])
     website = place_data["website"]
-    return (response, map_link, website)
+    return (response, map_link, website, get_photos_for_place(place_id))
 
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
@@ -1014,13 +1033,21 @@ def handle_navigation(call):
         elif prefix == "sendplace":
             sent_message_id = redis_client.get(f"place_message_id_{call.message.chat.id}")
             chat_id = call.message.chat.id
-            try:
-                bot.delete_message(chat_id=chat_id, message_id=sent_message_id)
-            except:
-                pass
+            photos_message_ids = redis_client.lrange(f"place_photos_id_{chat_id}", 0, -1)
+            if photos_message_ids:
+                for message_id in photos_message_ids:
+                    try:
+                        bot.delete_message(chat_id=chat_id, message_id=message_id)
+                    except:
+                        pass
             
-            response, map_link, website = get_detailed_place_info(place_id, latitude, longitude, chat_id)
-
+            if sent_message_id: 
+                try:
+                    bot.delete_message(chat_id=chat_id, message_id=sent_message_id)
+                except:
+                    pass
+            
+            response, map_link, website, photos = get_detailed_place_info(place_id, latitude, longitude, chat_id)
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
                 inline_keyboard.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
@@ -1036,6 +1063,19 @@ def handle_navigation(call):
                     types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_id}"),
                 )
             
+            media = []
+            for index, photo in enumerate(photos):
+                media.append(types.InputMediaPhoto(photo))
+            
+            if media:
+                media_messages = bot.send_media_group(chat_id, media)
+                photo_message_ids = [msg.message_id for msg in media_messages]
+            else:
+                photo_message_ids = []
+            
+            for message_id in photo_message_ids:
+                redis_client.rpush(f"place_photos_id_{chat_id}", message_id)
+                
             place_message_id = bot.send_message(chat_id, response, reply_markup=inline_keyboard).message_id
             redis_client.set(f"place_message_id_{chat_id}", place_message_id)
             

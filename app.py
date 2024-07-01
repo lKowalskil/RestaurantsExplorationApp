@@ -126,6 +126,33 @@ def replace_weekdays(text):
     logger.debug(f"Weekday replacement completed. Text after replacement: {text}")
     return text
 
+def is_favourite(place_id, tg_user_id):
+    try:
+        conn = pool.get_connection()
+        cursor = conn.cursor(dictionary=True)
+        
+        query = """
+        SELECT COUNT(*) as count
+        FROM Favourites
+        WHERE place_id = %s AND tg_user_id = %s
+        """
+        cursor.execute(query, (place_id, tg_user_id))
+        result = cursor.fetchone()
+        
+        is_fav = result['count'] > 0
+        
+        return is_fav
+    
+    except mysql.connector.Error as err:
+        logger.error(f"Error: {err}")
+        return False
+    
+    finally:
+        if cursor:
+            cursor.close()
+        if conn:
+            conn.close()
+            
 def is_open_now(data):
     now = datetime.datetime.now()
     current_day = now.weekday()
@@ -1047,22 +1074,31 @@ def handle_navigation(call):
                 except:
                     pass
             
+            user_id = call.from_user.id
+            place_is_favourite = is_favourite(place_id, chat_id)
+            
             response, map_link, website, photos = get_detailed_place_info(place_id, latitude, longitude, chat_id)
             inline_keyboard = types.InlineKeyboardMarkup(row_width=2)
             if map_link:
                 inline_keyboard.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
             if website is not None:
                 inline_keyboard.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
-            inline_keyboard.add(
-                    types.InlineKeyboardButton("❌Прибрати з обраних", callback_data=f"removefromfavourites_{chat_id}_{place_id}"),
+            if place_is_favourite:
+                inline_keyboard.add(
+                        types.InlineKeyboardButton("❌Прибрати з обраних", callback_data=f"removefromfavourites_{user_id}_{place_id}"),
+                )
+            else:
+                inline_keyboard.add(
+                    types.InlineKeyboardButton("⭐Додати до обраних", callback_data=f"favourites_{place_id}"),
                 )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{place_id}"),
-                )
+                types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{place_id}"),
+            )
             inline_keyboard.add(
-                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_id}"),
-                )
-            
+                types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{place_id}"),
+            )
+
+
             media = []
             for index, photo in enumerate(photos):
                 media.append(types.InputMediaPhoto(photo))

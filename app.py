@@ -447,6 +447,54 @@ def get_detailed_place_info_without_distance(place_id, user_id):
     website = place_data["website"]
     return (response, map_link, website, get_photos_for_place(place_id))
 
+def store_user_location(user_id, latitude, longitude):
+    connection = pool.get_connection()
+    cursor = connection.cursor()
+    try:
+        query = """
+        INSERT INTO user_locations (user_id, latitude, longitude, timestamp)
+        VALUES (%s, %s, %s, NOW())
+        """
+        cursor.execute(query, (user_id, latitude, longitude))
+        connection.commit()
+    except mysql.connector.Error as err:
+        logger.error(f"Error: {err}")
+    finally:
+        cursor.close()
+        connection.close()
+
+def get_latest_position(user_id, time_limit_minutes):
+    connection = pool.get_connection()
+    cursor = connection.cursor(dictionary=True)
+    try:
+        time_limit = datetime.datetime.now() - datetime.timedelta(minutes=time_limit_minutes)
+        
+        query = """
+        SELECT latitude, longitude, timestamp
+        FROM user_locations
+        WHERE user_id = %s AND timestamp >= %s
+        ORDER BY timestamp DESC
+        LIMIT 1
+        """
+        cursor.execute(query, (user_id, time_limit))
+        result = cursor.fetchone()
+        
+        if result:
+            return {
+                'latitude': result['latitude'],
+                'longitude': result['longitude'],
+                'timestamp': result['timestamp']
+            }
+        else:
+            return None 
+
+    except mysql.connector.Error as err:
+        logger.error(f"Error: {err}")
+        return None
+    finally:
+        cursor.close()
+        connection.close()
+
 BOT_TOKEN = os.environ.get("BOT_TOKEN")
 
 bot = TeleBot(BOT_TOKEN)
@@ -559,6 +607,7 @@ def handle_contact(message):
 def save_location(message):
     location_string = f"{message.location.latitude},{message.location.longitude}"
     redis_client.set(message.chat.id, location_string)
+    store_user_location(message.from_user.id, message.location.latitude, message.location.longitude)
     bot.send_message(message.chat.id, "📝Запам'ятав", reply_markup=location_keyboard)
 
 @bot.message_handler(content_types=['text'])
@@ -1208,8 +1257,8 @@ def search(message, keywords=None, type=None):
     user_id = message.from_user.id
     if message.location:
         location_string = f"{message.location.latitude},{message.location.longitude}"
-        redis_client.set(message.chat.id, location_string)
-
+        store_user_location(message.from_user.id, message.location.latitude, message.location.longitude)
+    
     chat_id = message.chat.id
     if redis_client.exists(f"{chat_id}_reviews_message"):
         message_id_reviews = redis_client.get(f"{chat_id}_reviews_message")
@@ -1231,8 +1280,9 @@ def search(message, keywords=None, type=None):
 
         redis_client.delete(f"{chat_id}_places_message")
 
-    location_string = redis_client.get(chat_id)
-    if location_string:
+    location = get_latest_position(user_id, 5)
+    latitude, longitude = location["latitude"], location["longitude"]
+    if latitude and longitude:
         search_radius = redis_client.get(str(chat_id) + "_range")
         if(search_radius is None):
             search_radius = 300
@@ -1247,9 +1297,6 @@ def search(message, keywords=None, type=None):
                 type="cafe"
 
             logger.info(f"Search keywords: {keywords}")
-
-            latitude, longitude = location_string.decode().split(',')
-
 
             logger.info(f"Search location: ({latitude}, {longitude}). Radius: {search_radius}")
             places = get_places(float(latitude), float(longitude), search_radius, keywords, type=type)
@@ -1281,32 +1328,6 @@ def search(message, keywords=None, type=None):
             keyboard_places.row(*number_buttons)
             sent_message_places = bot.send_message(message.chat.id, response, reply_markup=keyboard_places, parse_mode="")
             redis_client.set(f"sentmessageplaces_{message.chat.id}", sent_message_places.message_id)
-            
-            """first_place = redis_client.lindex(f'{message.chat.id}_places', 0)
-            if first_place:
-                first_place = json.loads(first_place)
-                response_places, map_link, website = get_detailed_place_info(first_place["place_id"], latitude, longitude, user_id)
-                keyboard_places = types.InlineKeyboardMarkup(row_width=2)
-                if map_link:
-                    keyboard_places.add(types.InlineKeyboardButton(text="🗺️Відобразити на мапі", url=map_link))
-                if website is not None:
-                    keyboard_places.add(types.InlineKeyboardButton(text="🌐Вебсайт", url=website))
-                keyboard_places.add(
-                    types.InlineKeyboardButton("⭐Додати до обраних", callback_data=f"favourites_{first_place['place_id']}"),
-                )
-                keyboard_places.add(
-                    types.InlineKeyboardButton("📝Переглянути відгуки", callback_data=f"sendreviews_{first_place['place_id']}"),
-                )
-                keyboard_places.add(
-                    types.InlineKeyboardButton("➕Додати відгук", callback_data=f"addreview_{first_place['place_id']}"),
-                )
-                keyboard_places.add(
-                    types.InlineKeyboardButton("➡️", callback_data=f"place_{1}_{latitude}_{longitude}_{type}"),
-                )
-                redis_client.delete(f"{message.chat.id}_places_message")
-                sent_message_places = bot.send_message(message.chat.id, response_places, reply_markup=keyboard_places)
-                redis_client.set(f"{message.chat.id}_places_message", sent_message_places.message_id)"""
-
         except Exception as e:
             bot.send_message(message.chat.id, "Виникла помилка, почніть заново", reply_markup=start_keyboard)
             logger.error(f"Error : {e}")

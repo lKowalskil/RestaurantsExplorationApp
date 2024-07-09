@@ -639,6 +639,8 @@ def start(message):
 
 @bot.message_handler(content_types=['contact'])
 def handle_contact(message):
+    if message.text == "/back":
+        back_handler(message)
     phone_number = message.contact.phone_number
     user_id = message.from_user.id
 
@@ -676,6 +678,8 @@ def handle_contact(message):
 
 @bot.message_handler(content_types=['location'])
 def save_location(message):
+    if message.text == "/back":
+        back_handler(message)
     location_string = f"{message.location.latitude},{message.location.longitude}"
     redis_client.set(message.chat.id, location_string)
     store_user_location(message.from_user.id, message.location.latitude, message.location.longitude)
@@ -793,6 +797,8 @@ def handle_commands(message):
         bot.send_message(message.chat.id, "🚫Такої команди не існує, почніть заново", reply_markup=start_keyboard_auth)
 
 def handle_keywords_for_search(message):
+    if message.text == "/back":
+        back_handler(message)
     if message.text in search_option_keyboard_buttons_list:
         if message.text == "☕Кафе":
             search(message, type="cafe")
@@ -1234,6 +1240,8 @@ def handle_navigation(call):
         bot.answer_callback_query(call.id, "Сталася помилка. Спробуйте ще раз")
 
 def handle_name(message, place_id=None, review_id=None):
+    if message.text == "/back":
+        back_handler(message)
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
@@ -1249,6 +1257,8 @@ def handle_name(message, place_id=None, review_id=None):
         bot.register_next_step_handler(message, handle_name, place_id=place_id, review_id=review_id)
 
 def handle_score(message, place_id=None, review_id=None):
+    if message.text == "/back":
+        back_handler(message)
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
@@ -1275,6 +1285,8 @@ def handle_score(message, place_id=None, review_id=None):
         bot.register_next_step_handler(message, handle_score, place_id=place_id, review_id=review_id)
 
 def handle_review(message, place_id=None, review_id=None):
+    if message.text == "/back":
+        back_handler(message)
     if message.text == "/start":
         bot.send_message(message.chat.id,
                     """Вітаю! Цей бот допоможе вам знайти кафе та ресторани поблизу. \n
@@ -1315,6 +1327,8 @@ def handle_review(message, place_id=None, review_id=None):
         bot.register_next_step_handler(message, handle_review)
 
 def search(message, keywords=None, type=None):
+    if message.text == "/back":
+        back_handler(message)
     logger.info(f"Search triggered, keywords:{keywords}, type:{type}")
     user_id = message.from_user.id
     if message.location:

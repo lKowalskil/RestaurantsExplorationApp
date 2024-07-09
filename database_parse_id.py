@@ -63,7 +63,6 @@ for circle in circle_coordinates:
         fill_opacity=0.3
     ).add_to(my_map)
 
-# Save the map as an HTML file
 my_map.save("circle_map.html")
 
 base_nearby_url = "https://maps.googleapis.com/maps/api/place/nearbysearch/json"

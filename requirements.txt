@@ -13,7 +13,7 @@ httpcore==0.9.1
 httpx==0.13.3
 hyperframe==5.2.0
 idna==2.10
-mysql-connector-python==8.4.0
+mysql-connector-python==9.1.0
 pyTelegramBotAPI==4.16.1
 redis==5.0.2
 requests==2.31.0

@@ -1179,10 +1179,13 @@ def handle_navigation(call):
         elif data[0] == "review":
             prefix, index = data
             index = int(index)
-            show_next_review(call.id, chat_id, place_id)
+            chat_id = call.message.chat.id
+            place_id = '_'.join(data[1:])
+            show_next_review(chat_id, call.id, index)
         elif data[0] == "favourites":
             prefix = data[0]
             place_id = '_'.join(data[1:])
+            user_id = data[1]
             add_place_to_favourites(call.id, place_id, user_id)
         elif data[0] == "placefavourites":
             prefix, index = data
@@ -1192,10 +1195,12 @@ def handle_navigation(call):
         elif data[0] == "sendreviews":
             prefix = data[0]
             place_id = '_'.join(data[1:])
+            chat_id = call.message.chat.id
             send_place_reviews(call.id, chat_id, place_id)
         elif data[0] == "addreview":
             prefix = data[0]
             place_id = '_'.join(data[1:])
+            chat_id = call.message.chat.id
             add_review(call.message, chat_id, place_id)
         elif data[0] == "reviewedit":
             prefix, index = data
